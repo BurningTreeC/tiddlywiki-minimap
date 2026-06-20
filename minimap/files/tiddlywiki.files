@@ -33,6 +33,14 @@
             "isTiddlerFile": true
         },
         {
+            "file": "config-tooltips.tid",
+            "isTiddlerFile": true
+        },
+        {
+            "file": "controlpanel.tid",
+            "isTiddlerFile": true
+        },
+        {
             "file": "readme.tid",
             "isTiddlerFile": true
         }

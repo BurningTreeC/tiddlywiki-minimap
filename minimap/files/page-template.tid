@@ -3,6 +3,6 @@ tags: $:/tags/PageTemplate
 
 <%if [{$:/state/sidebar}match[no]] %>
 <div class="tc-minimap-wrapper" style.position="fixed" style.top="var(--tv-menubar-height,0px)" style.bottom="0" style.right="0">
-<$minimap container=".tc-story-river" scroller="html" selector=":scope > .tc-tiddler-frame" class="tc-minimap" mode="clone"/>
+<$minimap container=".tc-story-river" scroller="html" selector=":scope > .tc-tiddler-frame" class="tc-minimap" mode="clone" tooltips={{$:/config/BurningTreeC/minimap/tooltips}}/>
 </div>
 <% endif %>

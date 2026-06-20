@@ -1,0 +1,11 @@
+title: $:/plugins/BurningTreeC/minimap/ui/ControlPanel
+tags: $:/tags/ControlPanel/SettingsTab
+caption: Minimap
+
+! Minimap Settings
+
+A vertically-scaled overview of the story river, in the style of the CodeMirror&nbsp;6 minimap.
+
+!! Tooltips
+
+<$checkbox tiddler="$:/config/BurningTreeC/minimap/tooltips" field="text" checked="yes" unchecked="no" default="no"> ''Show tooltips'' — hovering a tiddler in the minimap shows its title</$checkbox>

@@ -33,6 +33,11 @@ Attributes:
 	mode      : "clone" (default) renders scaled clones of the matched elements;
 	            "blocks" renders lightweight coloured rectangles.
 	class     : Extra class name(s) added to the minimap panel.
+	tooltips  : "yes" to give each mapped block a native title tooltip (default
+	            "no"). The text is read from the attribute named by
+	            tooltipAttribute on the matched element.
+	tooltipAttribute : Attribute on the matched element to read the tooltip text
+	            from (default "data-tiddler-title").
 
 \*/
 
@@ -123,6 +128,11 @@ MinimapWidget.prototype.execute = function() {
 	this.elementSelector = this.getAttribute("selector","");
 	this.minimapClass = this.getAttribute("class","");
 	this.minimapMode = this.getAttribute("mode","clone");
+	// Opt-in tooltips: when "yes", each mapped block gets a native title tooltip
+	// read from a (configurable, generic) attribute on the matched element - e.g.
+	// data-tiddler-title for TiddlyWiki tiddler frames.
+	this.tooltipsEnabled = this.getAttribute("tooltips","no") === "yes";
+	this.tooltipAttribute = this.getAttribute("tooltipAttribute","data-tiddler-title");
 	var width = parseInt(this.getAttribute("width",""),10);
 	this.minimapWidth = (width && width > 0) ? width : DEFAULT_WIDTH;
 	// CSS custom property names to publish on the document root (configurable).
@@ -554,6 +564,17 @@ MinimapWidget.prototype.rebuild = function() {
 		block.style.height = info.height + "px";
 		block.style.margin = "0";
 		block.style.pointerEvents = "none";
+		// Optional tooltip from a configurable attribute on the matched element.
+		// A native title needs hover, so re-enable pointer events on this block
+		// (the clone inside stays inert; clicks still bubble to the panel and
+		// scroll-to-position because the block isn't the overlay).
+		if(this.tooltipsEnabled && this.tooltipAttribute && info.el.getAttribute) {
+			var tip = info.el.getAttribute(this.tooltipAttribute);
+			if(tip) {
+				block.title = tip;
+				block.style.pointerEvents = "auto";
+			}
+		}
 		if(this.minimapMode === "clone") {
 			var clone = this.processClone(info.el,info.el.cloneNode(true));
 			clone.style.margin = "0";
@@ -784,7 +805,8 @@ MinimapWidget.prototype.refresh = function(changedTiddlers) {
 	var changedAttributes = this.computeAttributes();
 	if(changedAttributes.container || changedAttributes.scroller || changedAttributes.selector ||
 		changedAttributes.width || changedAttributes.mode || changedAttributes["class"] ||
-		changedAttributes.widthVariable || changedAttributes.scrollbarVariable) {
+		changedAttributes.widthVariable || changedAttributes.scrollbarVariable ||
+		changedAttributes.tooltips || changedAttributes.tooltipAttribute) {
 		this.refreshSelf();
 		return true;
 	}
