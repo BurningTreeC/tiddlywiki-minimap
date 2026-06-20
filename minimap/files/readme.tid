@@ -11,7 +11,7 @@ The story-river minimap is installed automatically and needs no configuration. T
 * ''Show / hide:'' a small grip handle is fixed to the right edge of the screen, vertically centred. Click it to show or hide the minimap. When the minimap is showing, the handle sits at its left edge; when hidden, it sits at the screen edge. You can also toggle it from the settings (see below).
 * ''Narrow screens:'' the minimap and its grip are hidden below the sidebar breakpoint ({{$:/themes/tiddlywiki/vanilla/metrics/sidebarbreakpoint}}), the same width at which the sidebar collapses.
 * ''Tooltips:'' hovering a tiddler in the minimap can show its title (off by default).
-* ''Layout:'' the story river and sidebar automatically make room for the minimap, including in the vanilla theme's ''fluid-fixed'' sidebar layout.
+* ''Layout:'' the story river and sidebar automatically make room for the minimap, including in the vanilla theme's ''fluid-fixed'' sidebar layout. The top-right bar's buttons are shifted left by the minimap width so they stay clear of it (the menubar is left untouched).
 
 ! Settings
 

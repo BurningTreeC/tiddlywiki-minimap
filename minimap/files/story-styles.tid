@@ -5,6 +5,20 @@ tags: $:/tags/Stylesheet
 
 @media (min-width: {{$:/themes/tiddlywiki/vanilla/metrics/sidebarbreakpoint}}) {
 
+<%if [{$:/config/BurningTreeC/minimap/enabled}!match[no]] %>
+
+	/* Shift the TopRightBar container left so its buttons clear the minimap.
+	   margin-right shifts a fixed `right`-anchored element left by exactly the
+	   margin, without hardcoding the theme offset. Only the TopRightBar is
+	   targeted - the .tc-menubar and its items are left untouched. Gated on the
+	   minimap being enabled, since --tv-minimap-width keeps a baseline value even
+	   when the minimap is hidden. */
+	body.tc-body .tc-topbar-right {
+		margin-right: var(--tv-minimap-width, 0px);
+	}
+
+<% endif %>
+
 <%if [{$:/state/sidebar}match[no]then{$:/config/BurningTreeC/minimap/enabled}!match[no]] %>
 
 	body.tc-body .tc-story-river {

@@ -96,6 +96,19 @@ html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
 	border-color: var(--tv-minimap-block-border-color, <<colour muted-foreground>>);
 }
 
+/* Code shrunk into the minimap is faint. Keep the syntax-highlight colours, but
+   make the text bolder (thicker strokes survive downscaling) and boost the code
+   block's contrast/saturation so the colours stay legible at this scale. */
+.tc-minimap pre,
+.tc-minimap code,
+.tc-minimap .hljs * {
+	font-weight: bold;
+}
+
+.tc-minimap pre {
+	filter: contrast(1.4) saturate(1.4);
+}
+
 /* Lightweight "blocks" mode: solid translucent rectangles */
 .tc-minimap-block-filled {
 	background: <<colour foreground>>;
