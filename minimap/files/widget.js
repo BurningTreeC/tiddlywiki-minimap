@@ -110,6 +110,12 @@ MinimapWidget.prototype.render = function(parent,nextSibling) {
 	this.resolveAttempts = 0;
 	// The id of the pointer currently dragging the overlay (null when not dragging).
 	this.dragPointerId = null;
+	// Cached overlay height used to avoid redundant style writes. Reset here so the
+	// first updateView() after a (re-)render always writes the height to the freshly
+	// created overlay element - otherwise a refreshSelf() (e.g. on a settings
+	// change) would leave the new overlay at height 0 because the cached value still
+	// matched the unchanged geometry.
+	this._lastOverlayH = null;
 	// The mapped elements currently watched for size changes (kept in sync with
 	// the rendered set so the map updates live as tiddlers grow/shrink).
 	this._observedEls = [];
@@ -826,6 +832,9 @@ MinimapWidget.prototype.refresh = function(changedTiddlers) {
 		changedAttributes.widthVariable || changedAttributes.scrollbarVariable ||
 		changedAttributes.tooltips || changedAttributes.tooltipAttribute ||
 		changedAttributes.blockBorder) {
+		// Tear down listeners/observers first: refreshSelf() re-renders but does not
+		// call destroy(), so they would otherwise leak (and keep firing).
+		this.detachListeners();
 		this.refreshSelf();
 		return true;
 	}
@@ -833,12 +842,13 @@ MinimapWidget.prototype.refresh = function(changedTiddlers) {
 };
 
 /*
-Cleanup - called by the base widget's destroy().
+Remove all event listeners, observers and pending timers/frames. Used both by
+onDestroy and before a refreshSelf() re-render - the base widget's refreshSelf()
+does not call destroy(), so without this each re-render (e.g. on a settings
+change) would leak the previous listeners and observers.
 */
-MinimapWidget.prototype.onDestroy = function() {
+MinimapWidget.prototype.detachListeners = function() {
 	var win = this.getWindow();
-	this.publishWidth(true);
-	this.publishScrollbarWidth(true);
 	if(this.resolveRaf) {
 		win.cancelAnimationFrame(this.resolveRaf);
 		this.resolveRaf = null;
@@ -849,6 +859,7 @@ MinimapWidget.prototype.onDestroy = function() {
 	}
 	if(this.scrollEventTarget) {
 		this.scrollEventTarget.removeEventListener("scroll",this.boundScroll);
+		this.scrollEventTarget = null;
 	}
 	if(this.panel) {
 		this.panel.removeEventListener("pointerdown",this.boundPointerDown);
@@ -869,6 +880,15 @@ MinimapWidget.prototype.onDestroy = function() {
 		this.mutationObserver.disconnect();
 		this.mutationObserver = null;
 	}
+};
+
+/*
+Cleanup - called by the base widget's destroy().
+*/
+MinimapWidget.prototype.onDestroy = function() {
+	this.publishWidth(true);
+	this.publishScrollbarWidth(true);
+	this.detachListeners();
 };
 
 exports.minimap = MinimapWidget;
