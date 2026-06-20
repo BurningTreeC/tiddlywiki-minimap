@@ -28,6 +28,7 @@ The widget renders a panel whose height and placement are left to CSS (give its 
 |`class` |Extra class name(s) added to the minimap panel. |
 |`tooltips` |`yes` to give each mapped block a native tooltip on hover (default `no`). The text is read from the attribute named by `tooltipAttribute`. |
 |`tooltipAttribute` |Attribute on the matched element to read the tooltip text from (default `data-tiddler-title`). Keeps the widget generic - any layout can expose a title this way. |
+|`blockBorder` |On-screen border width in px around each mapped block, for visibility (default `1`; `0` disables). The width is scale-compensated so it stays crisp; set the colour with the `--tv-minimap-block-border-color` CSS property. |
 |`widthVariable` |Name of the CSS custom property to publish the minimap width on `<html>` (default `--tv-minimap-width`). The leading `--` is optional. |
 |`scrollbarVariable` |Name of the CSS custom property to publish the host scroll container's scrollbar width (default `--tv-minimap-scrollbar-width`). The leading `--` is optional. |
 

@@ -5,7 +5,7 @@ tags: $:/tags/Stylesheet
 
 @media (min-width: {{$:/themes/tiddlywiki/vanilla/metrics/sidebarbreakpoint}}) {
 
-<%if [{$:/state/sidebar}match[no]] %>
+<%if [{$:/state/sidebar}match[no]then{$:/config/BurningTreeC/minimap/enabled}!match[no]] %>
 
 	body.tc-body .tc-story-river {
 		width: calc(100% - {{$:/themes/tiddlywiki/vanilla/metrics/storyleft}} - var(--tv-minimap-width, 120px));
@@ -14,10 +14,25 @@ tags: $:/tags/Stylesheet
 
 <% endif %>
 
-<%if [{$:/state/sidebar}!match[no]] %>
+<%if [{$:/state/sidebar}!match[no]then{$:/config/BurningTreeC/minimap/enabled}!match[no]] %>
 
 	body.tc-body .tc-sidebar-scrollable {
 		padding-right: var(--tv-minimap-width, 0px);
+	}
+
+<% endif %>
+
+<%if [{$:/state/sidebar}!match[no]then{$:/config/BurningTreeC/minimap/enabled}!match[no]then{$:/themes/tiddlywiki/vanilla/options/sidebarlayout}match[fluid-fixed]] %>
+
+	/* Fluid-fixed: make room for the minimap to the right of the fixed sidebar by
+	   widening the sidebar column and pushing the fluid story river left by the
+	   minimap width (added on top of the theme's sidebarwidth). */
+	body.tc-body .tc-story-river {
+		margin-right: calc({{$:/themes/tiddlywiki/vanilla/metrics/sidebarwidth}} + var(--tv-minimap-width, 0px));
+	}
+
+	body.tc-body .tc-sidebar-scrollable {
+		width: calc({{$:/themes/tiddlywiki/vanilla/metrics/sidebarwidth}} + var(--tv-minimap-width, 0px));
 	}
 
 <% endif %>

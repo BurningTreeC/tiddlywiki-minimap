@@ -6,6 +6,21 @@ caption: Minimap
 
 A vertically-scaled overview of the story river, in the style of the CodeMirror&nbsp;6 minimap.
 
+!! Display
+
+<$checkbox tiddler="$:/config/BurningTreeC/minimap/enabled" field="text" checked="yes" unchecked="no" default="yes"> ''Show minimap'' — also toggled by the arrow button in the top-right bar</$checkbox>
+
+!! Appearance
+
+Border drawn around each tiddler in the minimap, for visibility:
+
+<$select tiddler="$:/config/BurningTreeC/minimap/block-border" default="1">
+<option value="0">None</option>
+<option value="1">Subtle (1px)</option>
+<option value="2">Distinct (2px)</option>
+<option value="3">Strong (3px)</option>
+</$select>
+
 !! Tooltips
 
 <$checkbox tiddler="$:/config/BurningTreeC/minimap/tooltips" field="text" checked="yes" unchecked="no" default="no"> ''Show tooltips'' — hovering a tiddler in the minimap shows its title</$checkbox>

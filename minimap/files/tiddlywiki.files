@@ -17,6 +17,14 @@
             }
         },
         {
+            "file": "page-scrollbar.js",
+            "fields": {
+                "type": "application/javascript",
+                "title": "$:/plugins/BurningTreeC/minimap/page-scrollbar.js",
+                "module-type": "startup"
+            }
+        },
+        {
             "file": "styles.tid",
             "isTiddlerFile": true
         },
@@ -34,6 +42,18 @@
         },
         {
             "file": "config-tooltips.tid",
+            "isTiddlerFile": true
+        },
+        {
+            "file": "config-enabled.tid",
+            "isTiddlerFile": true
+        },
+        {
+            "file": "config-block-border.tid",
+            "isTiddlerFile": true
+        },
+        {
+            "file": "config-width.tid",
             "isTiddlerFile": true
         },
         {

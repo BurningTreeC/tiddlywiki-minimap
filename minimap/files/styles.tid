@@ -3,11 +3,70 @@ tags: $:/tags/Stylesheet
 
 \rules only filteredtranscludeinline transcludeinline macrodef macrocallinline
 
-/* Hide the minimap on narrow screens (below the sidebar breakpoint) */
+/* Baseline minimap width on the document root, always present (independent of
+   whether the widget is mounted, and of which placement is active). The widget
+   overrides this inline with its live value while mounted; when it unmounts this
+   baseline remains, so stylesheets that read var(--tv-minimap-width) always have
+   a value. Kept in sync with the widget via the shared width config tiddler. */
+html {
+	--tv-minimap-width: {{$:/config/BurningTreeC/minimap/width}};
+}
+
+/* Hide the minimap (and its grip) on narrow screens (below the sidebar breakpoint) */
 @media (max-width: {{$:/themes/tiddlywiki/vanilla/metrics/sidebarbreakpoint}}) {
-	.tc-minimap-wrapper {
+	.tc-minimap-wrapper,
+	.tc-minimap-grip {
 		display: none;
 	}
+}
+
+.tc-minimap-wrapper {
+	z-index: 400;
+}
+
+/* Grip handle: a small vertically-centred tab fixed to the right edge. It sits
+   at the minimap's left edge when the minimap is shown, and at the viewport edge
+   when hidden; clicking it toggles the minimap. The `right` offset is supplied
+   inline by the placement (it differs between sidebar-shown and sidebar-hidden). */
+.tc-minimap-grip {
+	position: fixed;
+	top: 50%;
+	transform: translateY(-50%);
+	z-index: 401;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	height: 64px;
+	padding: 0;
+	margin: 0;
+	background: <<colour page-background>>;
+	border: 1px solid <<colour muted-foreground>>;
+	border-right: none;
+	border-radius: 6px 0 0 6px;
+	color: <<colour muted-foreground>>;
+	cursor: pointer;
+	box-shadow: -1px 0 4px rgba(0, 0, 0, 0.1);
+	transition: right 200ms ease, background-color 150ms, color 150ms;
+}
+
+/* When an overlay scrollbar is actually present (the page overflows and no
+   classic gutter is reserved - detected in page-scrollbar.js, which toggles the
+   class on <html>), the scrollbar paints on top of the edge grip. Widen it so a
+   grabbable strip stays clear to the left of the overlay scrollbar. */
+html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
+	width: 24px;
+}
+
+.tc-minimap-grip:hover {
+	background: <<colour message-background>>;
+	color: <<colour foreground>>;
+}
+
+.tc-minimap-grip svg {
+	width: 12px;
+	height: 12px;
+	fill: currentColor;
 }
 
 .tc-minimap {
@@ -40,6 +99,9 @@ tags: $:/tags/Stylesheet
 
 .tc-minimap-block {
 	overflow: hidden;
+	/* Border width is set inline by the widget (scale-compensated); colour here.
+	   Override the colour with the --tv-minimap-block-border-color property. */
+	border-color: var(--tv-minimap-block-border-color, <<colour muted-foreground>>);
 }
 
 /* Lightweight "blocks" mode: solid translucent rectangles */

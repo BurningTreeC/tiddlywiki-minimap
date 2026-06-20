@@ -38,6 +38,10 @@ Attributes:
 	            tooltipAttribute on the matched element.
 	tooltipAttribute : Attribute on the matched element to read the tooltip text
 	            from (default "data-tiddler-title").
+	blockBorder : On-screen border width in px drawn around each mapped block, for
+	            visibility (default 1; 0 disables). The colour is set in CSS via
+	            the .tc-minimap-block border-color (overridable with the
+	            --tv-minimap-block-border-color custom property).
 
 \*/
 
@@ -133,6 +137,11 @@ MinimapWidget.prototype.execute = function() {
 	// data-tiddler-title for TiddlyWiki tiddler frames.
 	this.tooltipsEnabled = this.getAttribute("tooltips","no") === "yes";
 	this.tooltipAttribute = this.getAttribute("tooltipAttribute","data-tiddler-title");
+	// On-screen border width (px) drawn around each mapped block, for visibility.
+	// The blocks are inside a scaled container, so the actual border width is
+	// compensated by the scale at build time (see rebuild). 0 disables the border.
+	var border = parseFloat(this.getAttribute("blockBorder","1"));
+	this.blockBorder = (isFinite(border) && border >= 0) ? border : 1;
 	var width = parseInt(this.getAttribute("width",""),10);
 	this.minimapWidth = (width && width > 0) ? width : DEFAULT_WIDTH;
 	// CSS custom property names to publish on the document root (configurable).
@@ -564,6 +573,15 @@ MinimapWidget.prototype.rebuild = function() {
 		block.style.height = info.height + "px";
 		block.style.margin = "0";
 		block.style.pointerEvents = "none";
+		// Border for visibility. Width is compensated by the scale so it renders at
+		// the configured on-screen pixel width despite the scaled parent; colour
+		// comes from CSS (.tc-minimap-block border-color). box-sizing keeps the
+		// border inside the measured block so it doesn't shift positions.
+		if(this.blockBorder > 0 && this.scale > 0) {
+			block.style.boxSizing = "border-box";
+			block.style.borderStyle = "solid";
+			block.style.borderWidth = (this.blockBorder / this.scale) + "px";
+		}
 		// Optional tooltip from a configurable attribute on the matched element.
 		// A native title needs hover, so re-enable pointer events on this block
 		// (the clone inside stays inert; clicks still bubble to the panel and
@@ -806,7 +824,8 @@ MinimapWidget.prototype.refresh = function(changedTiddlers) {
 	if(changedAttributes.container || changedAttributes.scroller || changedAttributes.selector ||
 		changedAttributes.width || changedAttributes.mode || changedAttributes["class"] ||
 		changedAttributes.widthVariable || changedAttributes.scrollbarVariable ||
-		changedAttributes.tooltips || changedAttributes.tooltipAttribute) {
+		changedAttributes.tooltips || changedAttributes.tooltipAttribute ||
+		changedAttributes.blockBorder) {
 		this.refreshSelf();
 		return true;
 	}
