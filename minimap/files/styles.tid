@@ -12,14 +12,6 @@ html {
 	--tv-minimap-width: {{$:/config/BurningTreeC/minimap/width}};
 }
 
-/* Hide the minimap (and its grip) on narrow screens (below the sidebar breakpoint) */
-@media (max-width: {{$:/themes/tiddlywiki/vanilla/metrics/sidebarbreakpoint}}) {
-	.tc-minimap-wrapper,
-	.tc-minimap-grip {
-		display: none;
-	}
-}
-
 .tc-minimap-wrapper {
 	z-index: 400;
 }
@@ -158,4 +150,14 @@ html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
 
 .tc-minimap-active .tc-minimap-overlay {
 	opacity: 0.4;
+}
+
+/* Hide the minimap and its grip on narrow screens (below the sidebar breakpoint).
+   Placed last so it overrides the base display rules - media queries add no
+   specificity, so source order decides. */
+@media (max-width: {{$:/themes/tiddlywiki/vanilla/metrics/sidebarbreakpoint}}) {
+	.tc-minimap-wrapper,
+	.tc-minimap-grip {
+		display: none;
+	}
 }
