@@ -1,0 +1,37 @@
+title: $:/plugins/BurningTreeC/minimap/readme
+
+The `<$minimap>` widget renders a vertically-scaled overview of a scroll container's content, in the style of the CodeMirror&nbsp;6 minimap, together with a draggable overlay that marks the visible viewport.
+
+It is generic: the scroll container and the elements that make up the map are both chosen with CSS selectors, so the widget is not tied to any particular layout. Dragging or clicking the minimap scrolls the container; scrolling the container moves the overlay.
+
+! Usage
+
+```
+<$minimap
+	container=".tc-story-river"
+	selector=".tc-tiddler-frame"
+	width="120"
+	mode="clone"
+/>
+```
+
+The widget renders a panel whose height and placement are left to CSS (give its parent a height, e.g. place it in a fixed-height sidebar column).
+
+! Attributes
+
+|!Attribute |!Description |
+|`container` |CSS selector for the element whose content is mapped. When omitted, the nearest scrollable ancestor of the widget is used. |
+|`scroller` |CSS selector for the element that actually scrolls. Defaults to the container. Use this when the container itself does not scroll but an ancestor does. |
+|`selector` |CSS selector (resolved within the container) for the elements that make up the map. Defaults to the container's element children. |
+|`width` |Minimap width in pixels (default `120`). |
+|`mode` |`clone` (default) renders scaled clones of the matched elements; `blocks` renders lightweight coloured rectangles. |
+|`class` |Extra class name(s) added to the minimap panel. |
+|`widthVariable` |Name of the CSS custom property to publish the minimap width on `<html>` (default `--tv-minimap-width`). The leading `--` is optional. |
+|`scrollbarVariable` |Name of the CSS custom property to publish the host scroll container's scrollbar width (default `--tv-minimap-scrollbar-width`). The leading `--` is optional. |
+
+! Published CSS variables
+
+The widget sets two custom properties on the document root (`<html>`) so stylesheets can size and position around it:
+
+* `--tv-minimap-width` (or your `widthVariable`) — the minimap's width.
+* `--tv-minimap-scrollbar-width` (or your `scrollbarVariable`) — the vertical scrollbar width of the scroll container the minimap is placed inside, so you can offset the minimap just clear of that scrollbar.
