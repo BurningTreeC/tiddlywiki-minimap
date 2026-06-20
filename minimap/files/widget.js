@@ -99,15 +99,17 @@ MinimapWidget.prototype.render = function(parent,nextSibling) {
 	this.rafPending = false;
 	this.rebuildTimer = null;
 	this.resolveAttempts = 0;
+	// The id of the pointer currently dragging the overlay (null when not dragging).
+	this.dragPointerId = null;
 	// The mapped elements currently watched for size changes (kept in sync with
 	// the rendered set so the map updates live as tiddlers grow/shrink).
 	this._observedEls = [];
 	// Bind handlers once so we can remove them again
 	this.boundScroll = this.onScroll.bind(this);
 	this.boundResize = this.onResize.bind(this);
-	this.boundMouseDown = this.onMouseDown.bind(this);
-	this.boundMouseMove = this.onMouseMove.bind(this);
-	this.boundMouseUp = this.onMouseUp.bind(this);
+	this.boundPointerDown = this.onPointerDown.bind(this);
+	this.boundPointerMove = this.onPointerMove.bind(this);
+	this.boundPointerUp = this.onPointerUp.bind(this);
 	// Resolve the container/scroller and wire everything up
 	this.setup();
 };
@@ -268,9 +270,13 @@ MinimapWidget.prototype.attachListeners = function() {
 	this.scrollEventTarget = this.getScrollEventTarget();
 	this.scrollEventTarget.addEventListener("scroll",this.boundScroll,{passive: true});
 	win.addEventListener("resize",this.boundResize);
-	this.panel.addEventListener("mousedown",this.boundMouseDown);
-	win.addEventListener("mousemove",this.boundMouseMove);
-	win.addEventListener("mouseup",this.boundMouseUp);
+	// Pointer events (mouse/touch/pen). Pointer capture during a drag delivers all
+	// move/up events to the panel even when the pointer leaves it, so no
+	// window-level listeners are needed.
+	this.panel.addEventListener("pointerdown",this.boundPointerDown);
+	this.panel.addEventListener("pointermove",this.boundPointerMove);
+	this.panel.addEventListener("pointerup",this.boundPointerUp);
+	this.panel.addEventListener("pointercancel",this.boundPointerUp);
 	// Rebuild when the mapped content changes size or when elements are added
 	// or removed (e.g. tiddlers opened/closed in the story river).
 	if(typeof win.ResizeObserver === "function") {
@@ -694,16 +700,26 @@ MinimapWidget.prototype.scheduleRebuild = function() {
 	},100);
 };
 
-MinimapWidget.prototype.onMouseDown = function(event) {
-	if(event.button === 2) {
+MinimapWidget.prototype.onPointerDown = function(event) {
+	// Primary button/contact only (ignore right/middle click and secondary touches).
+	if(event.button > 0) {
 		return;
 	}
 	if(event.target === this.overlay) {
-		// Begin dragging the overlay
+		// Begin dragging the overlay. Capture the pointer so move/up keep arriving
+		// at the panel even if the pointer strays outside it during the drag.
 		this.isDragging = true;
+		this.dragPointerId = event.pointerId;
 		this.dragStartY = event.clientY;
 		this.dragStartTop = this._overlayTop || 0;
 		this.panel.classList.add("tc-minimap-active");
+		if(this.panel.setPointerCapture) {
+			try {
+				this.panel.setPointerCapture(event.pointerId);
+			} catch(e) {
+				// Ignore - capture is an optimisation, not required for correctness
+			}
+		}
 		event.preventDefault();
 		return;
 	}
@@ -717,8 +733,8 @@ MinimapWidget.prototype.onMouseDown = function(event) {
 	this.scrollTo(target);
 };
 
-MinimapWidget.prototype.onMouseMove = function(event) {
-	if(!this.isDragging) {
+MinimapWidget.prototype.onPointerMove = function(event) {
+	if(!this.isDragging || (this.dragPointerId !== null && event.pointerId !== this.dragPointerId)) {
 		return;
 	}
 	event.preventDefault();
@@ -734,11 +750,23 @@ MinimapWidget.prototype.onMouseMove = function(event) {
 	this.scrollTo(contentTop + frac * scrollRange);
 };
 
-MinimapWidget.prototype.onMouseUp = function() {
-	if(this.isDragging) {
-		this.isDragging = false;
-		this.panel.classList.remove("tc-minimap-active");
+MinimapWidget.prototype.onPointerUp = function(event) {
+	if(!this.isDragging) {
+		return;
 	}
+	if(event && this.dragPointerId !== null && event.pointerId !== this.dragPointerId) {
+		return;
+	}
+	this.isDragging = false;
+	if(this.panel.releasePointerCapture && this.dragPointerId !== null) {
+		try {
+			this.panel.releasePointerCapture(this.dragPointerId);
+		} catch(e) {
+			// Ignore - the pointer may already have been released
+		}
+	}
+	this.dragPointerId = null;
+	this.panel.classList.remove("tc-minimap-active");
 };
 
 MinimapWidget.prototype.scrollTo = function(top) {
@@ -782,11 +810,12 @@ MinimapWidget.prototype.onDestroy = function() {
 		this.scrollEventTarget.removeEventListener("scroll",this.boundScroll);
 	}
 	if(this.panel) {
-		this.panel.removeEventListener("mousedown",this.boundMouseDown);
+		this.panel.removeEventListener("pointerdown",this.boundPointerDown);
+		this.panel.removeEventListener("pointermove",this.boundPointerMove);
+		this.panel.removeEventListener("pointerup",this.boundPointerUp);
+		this.panel.removeEventListener("pointercancel",this.boundPointerUp);
 	}
 	win.removeEventListener("resize",this.boundResize);
-	win.removeEventListener("mousemove",this.boundMouseMove);
-	win.removeEventListener("mouseup",this.boundMouseUp);
 	if(this.resizeObserver) {
 		this.resizeObserver.disconnect();
 		this.resizeObserver = null;

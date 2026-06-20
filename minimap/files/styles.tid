@@ -79,6 +79,8 @@ tags: $:/tags/Stylesheet
 	opacity: 0.2;
 	pointer-events: auto;
 	cursor: grab;
+	/* Don't let touch dragging the overlay pan/scroll the page or fire gestures */
+	touch-action: none;
 	transition: opacity 200ms;
 	will-change: transform;
 }
@@ -87,7 +89,11 @@ tags: $:/tags/Stylesheet
 	opacity: 0.3;
 }
 
+.tc-minimap-active,
+.tc-minimap-active .tc-minimap-overlay {
+	cursor: grabbing;
+}
+
 .tc-minimap-active .tc-minimap-overlay {
 	opacity: 0.4;
-	cursor: grabbing;
 }
