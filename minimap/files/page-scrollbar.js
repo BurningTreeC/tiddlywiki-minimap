@@ -3,11 +3,11 @@ title: $:/plugins/BurningTreeC/minimap/page-scrollbar.js
 type: application/javascript
 module-type: startup
 
-Publish the page (document root) vertical scrollbar width as the
---tv-page-scrollbar-width CSS variable on <html>, always - independent of the
-minimap widget. The minimap's grip handle sits at the right edge when the
-minimap is hidden, so it needs to clear the body/page scrollbar even though the
-widget (which publishes the host scroller's scrollbar width) is not mounted then.
+Toggle the tc-minimap-overlay-scrollbar class on <html> when the page is scrolled
+by an overlay scrollbar (the page overflows but reserves no scrollbar gutter).
+The minimap's edge grip is widened in that case so it stays grabbable to the left
+of the scrollbar that paints on top of it. A classic scrollbar reserves a gutter,
+so a fixed `right: 0` element already clears it and no adjustment is needed.
 
 \*/
 "use strict";
@@ -26,15 +26,14 @@ exports.startup = function() {
 	function update() {
 		var win = document.defaultView || window,
 			// innerWidth includes the scrollbar; documentElement.clientWidth excludes
-			// it, so the difference is the page's vertical scrollbar width.
-			width = Math.max(0, win.innerWidth - root.clientWidth);
-		root.style.setProperty("--tv-page-scrollbar-width", width + "px");
-		// An overlay scrollbar is present only when the page actually overflows AND
-		// no classic gutter is reserved (width === 0). A reserved gutter (width > 0)
-		// or a non-overflowing page must NOT count - otherwise the grip would widen
-		// when there's no scrollbar over it at all.
-		var overflows = root.scrollHeight > root.clientHeight,
-			hasOverlay = width === 0 && overflows;
+			// a classic (space-reserving) scrollbar. So a difference means a classic
+			// gutter is reserved; zero means an overlay scrollbar or none.
+			gutter = Math.max(0, win.innerWidth - root.clientWidth),
+			// An overlay scrollbar is present only when the page actually overflows
+			// AND no classic gutter is reserved. A reserved gutter or a
+			// non-overflowing page must NOT count - otherwise the grip would widen
+			// when there's no scrollbar painting over it at all.
+			hasOverlay = gutter === 0 && root.scrollHeight > root.clientHeight;
 		root.classList.toggle("tc-minimap-overlay-scrollbar",hasOverlay);
 	}
 

@@ -13,7 +13,7 @@ tags: $:/tags/PageTemplate
 
 <% else %>
 
-<$button class="tc-minimap-grip tc-minimap-grip-edge" set="$:/config/BurningTreeC/minimap/enabled" setTo="yes" style.right="var(--tv-page-scrollbar-width,0px)" tooltip="Show minimap" aria-label="Show minimap">{{$:/core/images/chevron-left}}</$button>
+<$button class="tc-minimap-grip tc-minimap-grip-edge" set="$:/config/BurningTreeC/minimap/enabled" setTo="yes" style.right="0" tooltip="Show minimap" aria-label="Show minimap">{{$:/core/images/chevron-left}}</$button>
 
 <% endif %>
 
