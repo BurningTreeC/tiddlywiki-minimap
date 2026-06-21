@@ -110,6 +110,9 @@ MinimapWidget.prototype.render = function(parent,nextSibling) {
 	this.resolveAttempts = 0;
 	// The id of the pointer currently dragging the overlay (null when not dragging).
 	this.dragPointerId = null;
+	// Whether this widget owns (publishes) the scrollbar-width variable. Decided in
+	// attachListeners once the root is known; false until then so no stray writes.
+	this.ownsScrollbarVar = false;
 	// Cached overlay height used to avoid redundant style writes. Reset here so the
 	// first updateView() after a (re-)render always writes the height to the freshly
 	// created overlay element - otherwise a refreshSelf() (e.g. on a settings
@@ -325,6 +328,17 @@ MinimapWidget.prototype.attachListeners = function() {
 			this.scrollbarObserver.observe(this.hostScroller);
 		}
 	}
+	// Decide whether this widget owns the scrollbar-width variable. If it is already
+	// present on the root, something else is managing it (in the bundled plugin, the
+	// always-on startup module that keeps it measured even while the minimap is
+	// hidden) - so defer to that owner and never write it, to avoid two writers and
+	// to avoid clearing the always-present value on destroy. If it is absent (a
+	// generic standalone <$minimap> with no startup module), take ownership and
+	// publish/maintain it ourselves.
+	var doc = this.document,
+		root = doc.documentElement;
+	this.ownsScrollbarVar = !!(this.scrollbarVariable && root && root.style &&
+		!root.style.getPropertyValue(this.scrollbarVariable));
 	// Publish the width and scrollbar variables now that everything is resolved.
 	this.publishWidth();
 	this.publishScrollbarWidth();
@@ -695,11 +709,15 @@ MinimapWidget.prototype.measure = function() {
 Publish the host scroll container's vertical scrollbar width as a CSS custom
 property (named by the scrollbarVariable attribute), so a stylesheet can offset
 the minimap just clear of the scrollbar of whatever container it lives in.
+
+Only writes when this widget owns the variable (see attachListeners): if something
+else already manages it - the always-on startup module in the bundled plugin - we
+must not write or clear it, so the value stays present and accurate at all times.
 */
 MinimapWidget.prototype.publishScrollbarWidth = function(clear) {
 	var doc = this.document,
 		root = doc.documentElement;
-	if(!root || !root.style || !this.scrollbarVariable) {
+	if(!root || !root.style || !this.scrollbarVariable || !this.ownsScrollbarVar) {
 		return;
 	}
 	if(clear) {

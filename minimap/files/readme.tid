@@ -73,7 +73,7 @@ The plugin sets these custom properties on the document root (`<html>`) so style
 
 |!Property |!Description |
 |`--tv-minimap-width` |The minimap width. Always present (kept in sync with the width configuration), even when the minimap is hidden. Rename per-widget with `widthVariable`. |
-|`--tv-minimap-scrollbar-width` |The vertical scrollbar width of the scroll container the minimap is placed inside, so styles can offset it just clear of that scrollbar. Published only while the minimap is mounted. Rename per-widget with `scrollbarVariable`. |
+|`--tv-minimap-scrollbar-width` |The vertical scrollbar width of the scroll container the minimap is placed inside, so styles - and the grip handle - can offset just clear of that scrollbar. Kept measured at all times (even while the minimap is hidden), since that scrollbar may come and go independently of the minimap. A generic standalone `<$minimap>` with no such tracker publishes and maintains it itself. Rename per-widget with `scrollbarVariable`. |
 |`--tv-menubar-height` |The height of a fixed menubar, if present (set only if no other plugin already provides it). Used to position the minimap below the menubar. |
 |`--tv-minimap-block-border-color` |//Not set by the plugin// — define it yourself to override the colour of the per-tiddler borders. |
 
