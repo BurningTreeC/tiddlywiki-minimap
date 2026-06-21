@@ -10,6 +10,12 @@ A vertically-scaled overview of the story river, in the style of the CodeMirror&
 
 <$checkbox tiddler="$:/config/BurningTreeC/minimap/enabled" field="text" checked="yes" unchecked="no" default="yes"> ''Show minimap'' — also toggled by the arrow button in the top-right bar</$checkbox>
 
+!! Width
+
+The width of the minimap in pixels (the story river and sidebar make room for it automatically):
+
+<$range tiddler="$:/config/BurningTreeC/minimap/width" min="60" max="320" increment="10" default="120"/> <$text text={{{ [{$:/config/BurningTreeC/minimap/width}addsuffix[px]] }}}/>
+
 !! Appearance
 
 Border drawn around each tiddler in the minimap, for visibility:

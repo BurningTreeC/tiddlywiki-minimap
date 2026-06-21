@@ -9,7 +9,7 @@ tags: $:/tags/Stylesheet
    baseline remains, so stylesheets that read var(--tv-minimap-width) always have
    a value. Kept in sync with the widget via the shared width config tiddler. */
 html {
-	--tv-minimap-width: {{$:/config/BurningTreeC/minimap/width}};
+	--tv-minimap-width: {{$:/config/BurningTreeC/minimap/width}}px;
 }
 
 .tc-minimap-wrapper {

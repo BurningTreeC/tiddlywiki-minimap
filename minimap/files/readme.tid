@@ -19,6 +19,7 @@ Go to $:/ControlPanel → ''Settings'' → ''Minimap'':
 
 |!Setting |!Description |
 |''Show minimap'' |Toggle the minimap on or off (same as the grip handle). |
+|''Width'' |The minimap width in pixels, from 60 to 320. The story river and sidebar make room for it automatically. |
 |''Border'' |Border drawn around each tiddler in the minimap, for visibility: None, Subtle, Distinct or Strong. |
 |''Show tooltips'' |Show each tiddler's title on hover in the minimap. |
 
@@ -28,7 +29,7 @@ The settings above are stored in these tiddlers (handy if you want to set them i
 
 |!Tiddler |!Default |!Description |
 |`$:/config/BurningTreeC/minimap/enabled` |`yes` |Whether the minimap is shown. |
-|`$:/config/BurningTreeC/minimap/width` |`120px` |The minimap width. Single source of truth — also published as the `--tv-minimap-width` CSS variable. |
+|`$:/config/BurningTreeC/minimap/width` |`120` |The minimap width in pixels (bare number; the `px` is added where needed). Set it with the ''Width'' slider in the settings. Single source of truth — also published as the `--tv-minimap-width` CSS variable. |
 |`$:/config/BurningTreeC/minimap/block-border` |`1` |On-screen border width in px around each tiddler (`0` disables). |
 |`$:/config/BurningTreeC/minimap/tooltips` |`no` |Whether to show tiddler-title tooltips. |
 
