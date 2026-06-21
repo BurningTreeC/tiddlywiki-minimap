@@ -1,8 +1,0 @@
-title: $:/plugins/BurningTreeC/minimap/sidebar-segment
-tags: $:/tags/SideBarSegment
-
-<%if [{$:/state/sidebar}!match[no]] %>
-<div class="tc-minimap-wrapper" style.position="fixed" style.top="var(--tv-menubar-height,0px)" style.bottom="0" style.right="var(--tv-minimap-scrollbar-width,16px)">
-<$minimap container=".tc-story-river" scroller="html" selector=":scope > .tc-tiddler-frame" class="tc-minimap" mode="clone"/>
-</div>
-<% endif %>
