@@ -292,6 +292,22 @@ MinimapWidget.prototype.getScrollEventTarget = function() {
 	return this.isRootScroller() ? this.getWindow() : this.scroller;
 };
 
+/*
+Height of any position:fixed toolbar that overlays the top of the page (marked
+with the `tc-adjust-top-of-scroll` class, e.g. a sticky menubar). Content scrolls
+underneath it, so the usable viewport - and therefore the overlay's height, the
+overlay's position and the targets we scroll to - must be offset by this height,
+matching TiddlyWiki's own PageScroller.scrollIntoView. The toolbar is fixed to the
+viewport, so it only applies when the page itself is the scroller.
+*/
+MinimapWidget.prototype.getTopOffset = function() {
+	if(!this.isRootScroller()) {
+		return 0;
+	}
+	var bar = this.document.querySelector(".tc-adjust-top-of-scroll");
+	return bar ? bar.offsetHeight : 0;
+};
+
 MinimapWidget.prototype.attachListeners = function() {
 	var self = this,
 		win = this.getWindow();
@@ -643,6 +659,10 @@ MinimapWidget.prototype.updateView = function() {
 	// positioned) minimap.
 	var scrollTop = this.scroller.scrollTop,
 		clientH = this._clientH || 0,
+		// A fixed top toolbar covers the top of the viewport, so the usable
+		// (visible) viewport starts that much lower and is that much shorter.
+		topOffset = this._topOffset || 0,
+		visibleH = Math.max(0, clientH - topOffset),
 		scale = this.scale,
 		contentTop = this._contentTop || 0,
 		contentBottom = this._contentBottom || 0,
@@ -650,9 +670,10 @@ MinimapWidget.prototype.updateView = function() {
 		// Total scaled height of the mapped elements
 		mapContentH = (contentBottom - contentTop) * scale,
 		// The viewport (overlay), anchored to the actual scroll position within
-		// the element extent
-		overlayH = Math.max(MIN_OVERLAY_HEIGHT, Math.min(clientH * scale, mapViewH)),
-		overlayTopMap = (scrollTop - contentTop) * scale,
+		// the element extent - sized and positioned for the usable viewport, so it
+		// marks what is actually visible below the toolbar.
+		overlayH = Math.max(MIN_OVERLAY_HEIGHT, Math.min(visibleH * scale, mapViewH)),
+		overlayTopMap = (scrollTop + topOffset - contentTop) * scale,
 		panelTravel = Math.max(0, mapViewH - overlayH),
 		translate,
 		overlayTop,
@@ -702,6 +723,7 @@ MinimapWidget.prototype.measure = function() {
 	}
 	this._clientH = this.scroller.clientHeight;
 	this._mapViewH = this.panel.clientHeight;
+	this._topOffset = this.getTopOffset();
 	this.publishScrollbarWidth();
 };
 
@@ -786,13 +808,15 @@ MinimapWidget.prototype.onPointerDown = function(event) {
 		event.preventDefault();
 		return;
 	}
-	// Click on the map body: scroll so the clicked position is centred
+	// Click on the map body: scroll so the clicked position is centred in the
+	// usable viewport (the part visible below any fixed top toolbar)
 	var panelRect = this.panel.getBoundingClientRect(),
 		panelY = event.clientY - panelRect.top,
 		// Map panel coordinates back to scroll-content coordinates
 		contentY = (panelY - (this._translate || 0)) / this.scale + (this._contentTop || 0),
 		clientH = this.scroller.clientHeight,
-		target = contentY - clientH / 2;
+		topOffset = this._topOffset || 0,
+		target = contentY - (clientH + topOffset) / 2;
 	this.scrollTo(target);
 };
 
@@ -806,11 +830,14 @@ MinimapWidget.prototype.onPointerMove = function(event) {
 		newTop = Math.min(Math.max(0, this.dragStartTop + delta), travel),
 		frac = travel > 0 ? newTop / travel : 0,
 		clientH = this.scroller.clientHeight,
+		// A fixed top toolbar shortens the usable viewport, and content lands that
+		// much lower; mirror the overlay maths in updateView so dragging tracks it.
+		topOffset = this._topOffset || 0,
 		// Map the overlay's travel onto the scroll range covered by the elements
 		contentTop = this._contentTop || 0,
 		contentBottom = this._contentBottom || 0,
-		scrollRange = Math.max(0, (contentBottom - contentTop) - clientH);
-	this.scrollTo(contentTop + frac * scrollRange);
+		scrollRange = Math.max(0, (contentBottom - contentTop) - (clientH - topOffset));
+	this.scrollTo(contentTop + frac * scrollRange - topOffset);
 };
 
 MinimapWidget.prototype.onPointerUp = function(event) {
