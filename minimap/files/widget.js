@@ -234,8 +234,9 @@ MinimapWidget.prototype.setup = function() {
 	// just clear of that scrollbar. Resolved by overflow style (not current
 	// overflow state) so we still pick it when its scrollbar appears later.
 	this.hostScroller = this.findScrollContainer(this.parentDomNode);
-	if(!this.container || !this.scroller || !this.panel || this.panel.clientHeight === 0) {
-		// Not ready yet - retry on the next frame for a little while
+	if(!this.container || !this.scroller || !this.panel) {
+		// The target elements aren't in the DOM yet - retry on the next frame for a
+		// little while (they may not exist or be laid out when we first render).
 		if(this.resolveAttempts < RESOLVE_RETRIES) {
 			this.resolveAttempts += 1;
 			var win = doc.defaultView || window;
@@ -245,6 +246,12 @@ MinimapWidget.prototype.setup = function() {
 		}
 		return;
 	}
+	// Attach as soon as the elements exist, even if the panel is currently hidden
+	// (e.g. the window started below the sidebar breakpoint, where the minimap is
+	// display:none). rebuild() early-returns while hidden, and the ResizeObserver on
+	// the panel then fires a rebuild the moment it becomes visible again - without
+	// this, a wiki opened narrow would never wire up its observers and the minimap
+	// would stay empty until toggled off and on.
 	this.attachListeners();
 	this.rebuild();
 };
