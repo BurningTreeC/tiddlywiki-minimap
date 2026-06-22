@@ -636,40 +636,222 @@ MinimapWidget.prototype.replaceIframe = function(origIframe,cloneIframe) {
 };
 
 /*
-Given a (cross-origin) iframe, try to render a known video provider's poster
-thumbnail into the replacement node. Returns true when a provider was recognised
-(YouTube synchronously, Vimeo via an async lookup that fills the image in later),
-false for an unrecognised embed so the caller can use a neutral placeholder.
+Provider table for deriving a poster thumbnail from a (cross-origin) embed URL.
+Each entry has a `re` to match/extract an id and exactly one resolver:
+  thumb(m,src)   -> a poster image URL, derivable synchronously (no network read).
+  api(m,src)     -> {url,pick} to fetch as JSON (oEmbed or a public lookup API),
+                    pick(data) returning the thumbnail URL; or null to skip.
+The first matching provider for a candidate URL wins. Providers whose thumbnail
+needs authentication or carries no derivable image (Twitch, Bandcamp, Google/OSM
+maps) are deliberately absent - they fall through to the neutral placeholder like
+any other cross-origin embed.
+*/
+MinimapWidget.prototype.posterProviders = function(raw) {
+	var self = this;
+	return [
+		{	// YouTube: .../embed/<id>, .../v/<id>, youtu.be/<id> (also -nocookie)
+			re: /(?:youtube(?:-nocookie)?\.com\/(?:embed|v)\/|youtu\.be\/)([A-Za-z0-9_-]{11})/,
+			thumb: function(m) {
+				return "https://img.youtube.com/vi/" + m[1] + "/hqdefault.jpg";
+			}
+		},
+		{	// Vimeo: player.vimeo.com/video/<id> or vimeo.com/<id>
+			re: /(?:player\.)?vimeo\.com\/(?:video\/)?(\d+)/,
+			api: function(m) {
+				return {
+					url: "https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F" + m[1],
+					pick: function(d) { return d && d.thumbnail_url; }
+				};
+			}
+		},
+		{	// Dailymotion: embed/video/<id>, geo.dailymotion player ?video=<id>, dai.ly/<id>
+			re: /dailymotion\.com\/(?:embed\/)?video\/([A-Za-z0-9]+)|geo\.dailymotion\.com\/player[^?]*\?(?:[^#]*&)?video=([A-Za-z0-9]+)|dai\.ly\/([A-Za-z0-9]+)/,
+			thumb: function(m) {
+				return "https://www.dailymotion.com/thumbnail/video/" + (m[1] || m[2] || m[3]);
+			}
+		},
+		{	// Spotify: open.spotify.com/[embed/]<type>/<id>
+			re: /open\.spotify\.com\/(?:embed\/)?(track|album|playlist|episode|show|artist)\/([A-Za-z0-9]+)/,
+			api: function(m) {
+				return {
+					url: "https://open.spotify.com/oembed?url=" + encodeURIComponent("https://open.spotify.com/" + m[1] + "/" + m[2]),
+					pick: function(d) { return d && d.thumbnail_url; }
+				};
+			}
+		},
+		{	// SoundCloud: w.soundcloud.com/player/?url=<track>, or a track page URL
+			re: /soundcloud\.com/,
+			api: function(m,src) {
+				// The real track URL lives in the player's `url` query param; fall back
+				// to the matched URL when the embed is a bare track page.
+				var track = self.queryParam(raw,"url") || self.queryParam(src,"url") || src;
+				if(/soundcloud\.com\/player/.test(track) || !/soundcloud\.com/.test(track)) {
+					return null;
+				}
+				return {
+					url: "https://soundcloud.com/oembed?format=json&url=" + encodeURIComponent(track),
+					pick: function(d) { return d && d.thumbnail_url; }
+				};
+			}
+		},
+		{	// Apple Music: embed.music.apple.com/<cc>/album|song/<name>/<id> (numeric id
+			// only - playlists use non-numeric ids the lookup API can't resolve)
+			re: /music\.apple\.com\/[a-z]{2}\/(?:album|song|music-video)\/[^\/]+\/(\d+)/,
+			api: function(m) {
+				return {
+					url: "https://itunes.apple.com/lookup?id=" + m[1],
+					pick: function(d) {
+						var r = d && d.results && d.results[0],
+							a = r && (r.artworkUrl100 || r.artworkUrl60 || r.artworkUrl30);
+						return a ? a.replace(/\/\d+x\d+bb\./,"/600x600bb.") : "";
+					}
+				};
+			}
+		},
+		{	// CodePen: codepen.io/<user>/embed|pen/<hash>
+			re: /codepen\.io\/([^\/]+)\/(?:embed|pen|details|full)\/([A-Za-z0-9]+)/,
+			api: function(m) {
+				return {
+					url: "https://codepen.io/api/oembed?format=json&url=" + encodeURIComponent("https://codepen.io/" + m[1] + "/pen/" + m[2]),
+					pick: function(d) { return d && d.thumbnail_url; }
+				};
+			}
+		},
+		{	// CodeSandbox: codesandbox.io/embed|s|p/sandbox/<id> -> screenshot endpoint
+			re: /codesandbox\.io\/(?:embed|s|p\/sandbox)\/([A-Za-z0-9\-]+)/,
+			thumb: function(m) {
+				return "https://codesandbox.io/api/v1/sandboxes/" + m[1] + "/screenshot.png";
+			}
+		},
+		{	// JSFiddle: jsfiddle.net/[<user>/]<id>/embedded/
+			re: /jsfiddle\.net\/(?:([^\/]+)\/)?([A-Za-z0-9]+)\/(?:embedded|embed)/,
+			api: function(m) {
+				var u = "https://jsfiddle.net/" + (m[1] ? m[1] + "/" : "") + m[2] + "/";
+				return {
+					url: "https://jsfiddle.net/api/oembed/?format=json&url=" + encodeURIComponent(u),
+					pick: function(d) { return d && d.thumbnail_url; }
+				};
+			}
+		},
+		{	// Internet Archive: archive.org/embed/<identifier> -> services/img/<identifier>
+			re: /archive\.org\/embed\/([^\/?#]+)/,
+			thumb: function(m) {
+				return "https://archive.org/services/img/" + m[1];
+			}
+		}
+	];
+};
+
+/*
+Given a (cross-origin) iframe, try to render a known provider's poster thumbnail
+into the replacement node. Returns true when a provider was recognised (synchronous
+thumbnails set immediately, async lookups filled in when they resolve), false for an
+unrecognised embed so the caller can use a neutral placeholder.
 */
 MinimapWidget.prototype.addProviderPoster = function(origIframe,repl) {
 	var raw = origIframe.getAttribute("src") || origIframe.src || "";
 	if(!raw) {
 		return false;
 	}
-	// An embed may be proxied (e.g. TiddlyDesktop reroutes YouTube/Vimeo through a
-	// local server so they load offline-of-CDN), so test the proxy URL and any real
-	// URL unwrapped from it.
-	var candidates = this.embedUrlCandidates(raw);
+	// An embed may be proxied (e.g. TiddlyDesktop reroutes embeds through a local
+	// server so they load), so test the proxy URL, any real URL unwrapped from a
+	// src=/url= query param, and any URL recovered for a configured embed host.
+	var candidates = this.embedUrlCandidates(raw)
+			.concat(this.proxyHostCandidates(raw,this.getEmbedHosts())),
+		providers = this.posterProviders(raw);
 	for(var i = 0; i < candidates.length; i++) {
 		var src = candidates[i];
-		// YouTube: .../embed/<id>, .../v/<id>, or youtu.be/<id> (also -nocookie).
-		// Ids are 11 chars; the public poster image needs no API call.
-		var yt = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed|v)\/|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-		if(yt) {
-			this.setPosterImage(repl,"https://img.youtube.com/vi/" + yt[1] + "/hqdefault.jpg");
-			return true;
-		}
-		// Vimeo: player.vimeo.com/video/<id> or vimeo.com/<id>. The poster URL is not
-		// derivable from the id, so look it up via the (CORS-enabled) oEmbed endpoint.
-		var vimeo = src.match(/(?:player\.)?vimeo\.com\/(?:video\/)?(\d+)/);
-		if(vimeo) {
-			// Neutral placeholder until (and if) the async lookup resolves.
-			repl.className += " tc-minimap-iframe-blank";
-			this.fetchVimeoPoster(vimeo[1],repl);
-			return true;
+		for(var p = 0; p < providers.length; p++) {
+			var prov = providers[p],
+				m = src.match(prov.re);
+			if(!m) {
+				continue;
+			}
+			if(prov.thumb) {
+				this.setPosterImage(repl,prov.thumb(m,src));
+				return true;
+			}
+			var spec = prov.api(m,src);
+			if(spec) {
+				// Neutral placeholder until (and if) the async lookup resolves.
+				repl.className += " tc-minimap-iframe-blank";
+				this.fetchThumbnail(repl,spec);
+				return true;
+			}
 		}
 	}
 	return false;
+};
+
+/*
+Hosts listed in $:/config/TiddlyDesktop/EmbedHosts (one per line, or comma/space
+separated). TiddlyDesktop reroutes embeds for these hosts through a local proxy;
+we use the list to recover the real provider URL out of a proxy URL. Each entry is
+normalised to a bare host (protocol and any path stripped, lower-cased).
+*/
+MinimapWidget.prototype.getEmbedHosts = function() {
+	var text = this.wiki ? this.wiki.getTiddlerText("$:/config/TiddlyDesktop/EmbedHosts","") : "";
+	if(!text) {
+		return [];
+	}
+	var parts = text.split(/[\s,]+/),
+		hosts = [];
+	for(var i = 0; i < parts.length; i++) {
+		var h = parts[i].trim().toLowerCase().replace(/^[a-z]+:\/\//,"").replace(/\/.*$/,"");
+		if(h) {
+			hosts.push(h);
+		}
+	}
+	return hosts;
+};
+
+/*
+Recover candidate real URLs from a proxy URL using the configured embed hosts: any
+configured host found anywhere in the (decoded) src is turned into an absolute
+https URL starting at that host. This covers both query-style proxying
+(?src=<encoded url>) and path-style proxying (/<host>/<path>), so a host that maps
+to a known provider still resolves its thumbnail whatever the proxy shape.
+*/
+MinimapWidget.prototype.proxyHostCandidates = function(src,hosts) {
+	var extra = [];
+	if(!hosts || !hosts.length) {
+		return extra;
+	}
+	var decoded;
+	try {
+		decoded = decodeURIComponent(src);
+	} catch(e) {
+		decoded = src;
+	}
+	var lower = decoded.toLowerCase();
+	for(var i = 0; i < hosts.length; i++) {
+		var host = hosts[i],
+			idx = lower.indexOf(host);
+		while(idx !== -1) {
+			// Use the original-case slice (the host index matches in the lower-cased
+			// copy, but paths/ids can be case-sensitive).
+			extra.push("https://" + decoded.slice(idx));
+			idx = lower.indexOf(host,idx + host.length);
+		}
+	}
+	return extra;
+};
+
+/*
+Read a named query parameter from a URL string, tolerant of relative URLs and
+parse failures (returns null).
+*/
+MinimapWidget.prototype.queryParam = function(url,name) {
+	var win = this.getWindow(),
+		URLctor = win.URL || (typeof URL !== "undefined" ? URL : null);
+	if(!URLctor) {
+		return null;
+	}
+	try {
+		return new URLctor(url,this.document.baseURI).searchParams.get(name);
+	} catch(e) {
+		return null;
+	}
 };
 
 /*
@@ -736,16 +918,22 @@ MinimapWidget.prototype.setPosterImage = function(repl,url) {
 };
 
 /*
-Look up a Vimeo video's poster via the oEmbed endpoint and, when it resolves, set
-it as the replacement node's image. Results (including failures) are cached by id
-on the widget so repeated rebuilds don't refetch; concurrent rebuilds chain onto
-the in-flight request.
+Fetch a thumbnail described by a spec ({url, pick}) - an oEmbed or public lookup
+endpoint returning JSON, with pick(data) extracting the image URL - and, when it
+resolves, set it as the replacement node's image. Results (including failures) are
+cached by endpoint URL on the widget so repeated rebuilds don't refetch; concurrent
+rebuilds chain onto the in-flight request. Any cross-origin/CORS or parse failure
+degrades quietly to the neutral placeholder already on the node.
 */
-MinimapWidget.prototype.fetchVimeoPoster = function(id,repl) {
+MinimapWidget.prototype.fetchThumbnail = function(repl,spec) {
+	if(!spec || !spec.url) {
+		return;
+	}
 	var self = this,
 		win = this.getWindow(),
 		cache = this._posterCache,
-		cached = cache[id];
+		key = spec.url,
+		cached = cache[key];
 	if(cached !== undefined) {
 		if(typeof cached === "string") {
 			if(cached) {
@@ -761,23 +949,28 @@ MinimapWidget.prototype.fetchVimeoPoster = function(id,repl) {
 		return;
 	}
 	if(!win.fetch) {
-		cache[id] = "";
+		cache[key] = "";
 		return;
 	}
-	var p = win.fetch("https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F" + encodeURIComponent(id))
+	var p = win.fetch(spec.url)
 		.then(function(response) {
 			return response.json();
 		})
 		.then(function(data) {
-			var url = (data && data.thumbnail_url) || "";
-			cache[id] = url;
+			var url = "";
+			try {
+				url = spec.pick(data) || "";
+			} catch(e) {
+				url = "";
+			}
+			cache[key] = url;
 			return url;
 		})
 		.catch(function() {
-			cache[id] = "";
+			cache[key] = "";
 			return "";
 		});
-	cache[id] = p;
+	cache[key] = p;
 	p.then(function(url) {
 		if(url) {
 			self.setPosterImage(repl,url);
