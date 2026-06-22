@@ -684,8 +684,13 @@ MinimapWidget.prototype.posterProviders = function(raw) {
 			api: function(m,src) {
 				// The real track URL lives in the player's `url` query param; fall back
 				// to the matched URL when the embed is a bare track page.
-				var track = self.queryParam(raw,"url") || self.queryParam(src,"url") || src;
-				if(/soundcloud\.com\/player/.test(track) || !/soundcloud\.com/.test(track)) {
+				var track = self.queryParam(raw,"url") || self.queryParam(src,"url") || src,
+					host = self.urlHost(track);
+				// Only accept a clean soundcloud.com track/page URL. The literal
+				// "soundcloud.com" survives percent-encoding, so the raw proxy URL also
+				// matches `re` - reject it (and the player URL itself) by host so the
+				// loop falls through to the candidate carrying the real track URL.
+				if(!host || !/(^|\.)soundcloud\.com$/.test(host) || /\/player(\/|\?|$)/.test(track)) {
 					return null;
 				}
 				return {
@@ -849,6 +854,22 @@ MinimapWidget.prototype.queryParam = function(url,name) {
 	}
 	try {
 		return new URLctor(url,this.document.baseURI).searchParams.get(name);
+	} catch(e) {
+		return null;
+	}
+};
+
+/*
+Lower-cased hostname of a URL string (no port), or null if it can't be parsed.
+*/
+MinimapWidget.prototype.urlHost = function(url) {
+	var win = this.getWindow(),
+		URLctor = win.URL || (typeof URL !== "undefined" ? URL : null);
+	if(!URLctor) {
+		return null;
+	}
+	try {
+		return new URLctor(url,this.document.baseURI).hostname.toLowerCase();
 	} catch(e) {
 		return null;
 	}
