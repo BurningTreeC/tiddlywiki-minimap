@@ -641,14 +641,16 @@ Each entry has a `re` to match/extract an id and exactly one resolver:
   thumb(m,src)   -> a poster image URL, derivable synchronously (no network read).
   api(m,src)     -> {url,pick} to fetch as JSON (oEmbed or a public lookup API),
                     pick(data) returning the thumbnail URL; or null to skip.
+  jsonp(m,src)   -> {url,param,pick} to load via JSONP, for a public API with no
+                    CORS (used only for the opt-in Apple Music provider below).
 The first matching provider for a candidate URL wins. Providers whose thumbnail
 needs authentication or carries no derivable image (Twitch, Bandcamp, Google/OSM
 maps) are deliberately absent - they fall through to the neutral placeholder like
-any other cross-origin embed.
+any other cross-origin embed. JSFiddle is also absent: no CORS-safe thumbnail.
 */
 MinimapWidget.prototype.posterProviders = function(raw) {
 	var self = this;
-	return [
+	var providers = [
 		{	// YouTube: .../embed/<id>, .../v/<id>, youtu.be/<id> (also -nocookie)
 			re: /(?:youtube(?:-nocookie)?\.com\/(?:embed|v)\/|youtu\.be\/)([A-Za-z0-9_-]{11})/,
 			thumb: function(m) {
@@ -693,33 +695,38 @@ MinimapWidget.prototype.posterProviders = function(raw) {
 				if(!host || !/(^|\.)soundcloud\.com$/.test(host) || /\/player(\/|\?|$)/.test(track)) {
 					return null;
 				}
+				// Newer embeds carry a URN id (.../tracks/soundcloud:tracks:<n>, often
+				// double-encoded) which 404s at oEmbed; reduce it to the plain numeric
+				// track id oEmbed expects. Public /user/slug URLs are left untouched.
+				var dec = track;
+				try {
+					dec = decodeURIComponent(track);
+				} catch(e) {
+					// keep track as-is
+				}
+				var idm = dec.match(/\/tracks\/(?:soundcloud:tracks:)?(\d+)/);
+				if(idm) {
+					track = "https://api.soundcloud.com/tracks/" + idm[1];
+				}
 				return {
 					url: "https://soundcloud.com/oembed?format=json&url=" + encodeURIComponent(track),
-					pick: function(d) { return d && d.thumbnail_url; }
-				};
-			}
-		},
-		{	// Apple Music: embed.music.apple.com/<cc>/album|song/<name>/<id> (numeric id
-			// only - playlists use non-numeric ids the lookup API can't resolve)
-			re: /music\.apple\.com\/[a-z]{2}\/(?:album|song|music-video)\/[^\/]+\/(\d+)/,
-			api: function(m) {
-				return {
-					url: "https://itunes.apple.com/lookup?id=" + m[1],
 					pick: function(d) {
-						var r = d && d.results && d.results[0],
-							a = r && (r.artworkUrl100 || r.artworkUrl60 || r.artworkUrl30);
-						return a ? a.replace(/\/\d+x\d+bb\./,"/600x600bb.") : "";
+						var t = d && d.thumbnail_url;
+						// SoundCloud returns a grey placeholder image for art-less tracks;
+						// treat that as "no thumbnail" so our own neutral placeholder shows.
+						return (t && !/\/images\/[^\/]*placeholder/i.test(t)) ? t : "";
 					}
 				};
 			}
 		},
-		{	// CodePen: codepen.io/<user>/embed|pen/<hash>
-			re: /codepen\.io\/([^\/]+)\/(?:embed|pen|details|full)\/([A-Za-z0-9]+)/,
-			api: function(m) {
-				return {
-					url: "https://codepen.io/api/oembed?format=json&url=" + encodeURIComponent("https://codepen.io/" + m[1] + "/pen/" + m[2]),
-					pick: function(d) { return d && d.thumbnail_url; }
-				};
+		{	// CodePen: codepen.io/<user>/embed|pen/<hash>, also team pens. Use the
+			// direct screenshot image (shots.codepen.io) instead of oEmbed: CodePen's
+			// oEmbed sends no CORS header, so a browser fetch - especially from a
+			// file:// wiki (Origin: null), e.g. TiddlyDesktop - is blocked. The image
+			// loads as a plain <img> regardless of origin.
+			re: /codepen\.io\/((?:team\/)?[^\/]+)\/(?:embed|pen|details|full)\/([A-Za-z0-9]+)/,
+			thumb: function(m) {
+				return "https://shots.codepen.io/" + m[1] + "/pen/" + m[2] + "-512.jpg";
 			}
 		},
 		{	// CodeSandbox: codesandbox.io/embed|s|p/sandbox/<id> -> screenshot endpoint
@@ -728,16 +735,9 @@ MinimapWidget.prototype.posterProviders = function(raw) {
 				return "https://codesandbox.io/api/v1/sandboxes/" + m[1] + "/screenshot.png";
 			}
 		},
-		{	// JSFiddle: jsfiddle.net/[<user>/]<id>/embedded/
-			re: /jsfiddle\.net\/(?:([^\/]+)\/)?([A-Za-z0-9]+)\/(?:embedded|embed)/,
-			api: function(m) {
-				var u = "https://jsfiddle.net/" + (m[1] ? m[1] + "/" : "") + m[2] + "/";
-				return {
-					url: "https://jsfiddle.net/api/oembed/?format=json&url=" + encodeURIComponent(u),
-					pick: function(d) { return d && d.thumbnail_url; }
-				};
-			}
-		},
+		// JSFiddle is intentionally absent: its oEmbed sends no CORS header and exposes
+		// no thumbnail_url, and there is no public screenshot image endpoint - so there
+		// is no CORS-safe way to get a preview. Such embeds use the neutral placeholder.
 		{	// Internet Archive: archive.org/embed/<identifier> -> services/img/<identifier>
 			re: /archive\.org\/embed\/([^\/?#]+)/,
 			thumb: function(m) {
@@ -745,6 +745,39 @@ MinimapWidget.prototype.posterProviders = function(raw) {
 			}
 		}
 	];
+	// Apple Music is opt-in (default off). Its only no-auth artwork source is the
+	// iTunes lookup API, which sends no CORS header and so can only be read via JSONP
+	// - which executes a script from itunes.apple.com. Enabling that is the user's
+	// informed choice, gated on $:/config/BurningTreeC/minimap/apple-music. The album
+	// id is digits-only and the host/callback are fixed, so a malicious embed cannot
+	// influence the request beyond the numeric id it already controls.
+	if(self.appleMusicEnabled()) {
+		providers.push({
+			// embed.music.apple.com/<cc>/album|song/<name>/<id> (numeric id only -
+			// playlists use non-numeric ids the lookup API can't resolve)
+			re: /music\.apple\.com\/[a-z]{2}\/(?:album|song|music-video)\/[^\/]+\/(\d+)/,
+			jsonp: function(m) {
+				return {
+					url: "https://itunes.apple.com/lookup?id=" + m[1],
+					param: "callback",
+					pick: function(d) {
+						var r = d && d.results && d.results[0],
+							a = r && (r.artworkUrl100 || r.artworkUrl60 || r.artworkUrl30);
+						return a ? a.replace(/\/\d+x\d+bb\./,"/600x600bb.") : "";
+					}
+				};
+			}
+		});
+	}
+	return providers;
+};
+
+/*
+Whether the opt-in Apple Music (JSONP) provider is enabled. Off unless the config
+tiddler is explicitly "yes" - see the note in posterProviders for why it is gated.
+*/
+MinimapWidget.prototype.appleMusicEnabled = function() {
+	return !!(this.wiki && this.wiki.getTiddlerText("$:/config/BurningTreeC/minimap/apple-music","no") === "yes");
 };
 
 /*
@@ -776,12 +809,25 @@ MinimapWidget.prototype.addProviderPoster = function(origIframe,repl) {
 				this.setPosterImage(repl,prov.thumb(m,src));
 				return true;
 			}
-			var spec = prov.api(m,src);
-			if(spec) {
-				// Neutral placeholder until (and if) the async lookup resolves.
-				repl.className += " tc-minimap-iframe-blank";
-				this.fetchThumbnail(repl,spec);
-				return true;
+			if(prov.jsonp) {
+				var js = prov.jsonp(m,src);
+				if(js) {
+					// Neutral placeholder until (and if) the JSONP lookup resolves.
+					repl.className += " tc-minimap-iframe-blank";
+					this.fetchJsonp(repl,js.url,js.param,js.pick);
+					return true;
+				}
+				continue;
+			}
+			if(prov.api) {
+				var spec = prov.api(m,src);
+				if(spec) {
+					// Neutral placeholder until (and if) the async lookup resolves.
+					repl.className += " tc-minimap-iframe-blank";
+					this.fetchThumbnail(repl,spec);
+					return true;
+				}
+				continue;
 			}
 		}
 	}
@@ -936,6 +982,42 @@ MinimapWidget.prototype.setPosterImage = function(repl,url) {
 	}
 	img.setAttribute("src",url);
 	repl.appendChild(img);
+	this.warmPosterImage(url);
+};
+
+/*
+Warm the browser cache for a poster URL with a persistent, off-DOM Image. A rebuild
+clears the scaler and re-clones from scratch, so the cloned <img> above can be
+removed mid-download - which drops the in-flight request, and for a slow CDN the
+image then never appears until some later rebuild coincides with a completed load
+(e.g. after scrolling). The detached preloader is never removed, so it always
+finishes loading; once it does, the URL is cached and one rebuild is scheduled so
+the poster shows immediately (the rebuilt <img> loads instantly from cache). Kept
+per-URL so each image warms and schedules at most once.
+*/
+MinimapWidget.prototype.warmPosterImage = function(url) {
+	var self = this,
+		cache = this._imgCache || (this._imgCache = Object.create(null));
+	if(!url || cache[url] !== undefined) {
+		return;
+	}
+	var win = this.getWindow();
+	if(!win || !win.Image) {
+		return;
+	}
+	var pre = new win.Image();
+	// Keep a reference so the load can't be garbage-collected/aborted.
+	cache[url] = pre;
+	pre.onload = function() {
+		cache[url] = true;
+		// Reflect the now-cached image in case rebuild churn orphaned the live <img>.
+		self.scheduleRebuild();
+	};
+	pre.onerror = function() {
+		// Remember the failure so we don't retry it every rebuild this session.
+		cache[url] = false;
+	};
+	pre.src = url;
 };
 
 /*
@@ -997,6 +1079,96 @@ MinimapWidget.prototype.fetchThumbnail = function(repl,spec) {
 			self.setPosterImage(repl,url);
 		}
 	});
+};
+
+/*
+Load a thumbnail from a CORS-less public API via JSONP (only used by the opt-in
+Apple Music provider). A <script> is appended whose URL is built entirely by us -
+fixed host, a numeric id, and a generated callback name - so a malicious embed
+can't influence it. The global callback and the script node are removed as soon as
+it fires (or errors, or times out), and results are cached by endpoint like
+fetchThumbnail. Any failure (CSP blocking the script, network, timeout) degrades
+quietly to the neutral placeholder already on the node.
+*/
+MinimapWidget.prototype.fetchJsonp = function(repl,endpoint,callbackParam,pick) {
+	if(!endpoint || !callbackParam) {
+		return;
+	}
+	var self = this,
+		win = this.getWindow(),
+		doc = this.document,
+		cache = this._posterCache,
+		key = endpoint,
+		cached = cache[key];
+	if(cached !== undefined) {
+		if(typeof cached === "string") {
+			if(cached) {
+				this.setPosterImage(repl,cached);
+			}
+		} else if(cached && cached.then) {
+			cached.then(function(url) {
+				if(url) {
+					self.setPosterImage(repl,url);
+				}
+			});
+		}
+		return;
+	}
+	var head = doc && (doc.head || doc.documentElement);
+	if(!win || !doc || !doc.createElement || !head) {
+		cache[key] = "";
+		return;
+	}
+	var resolveFn,
+		promise = new Promise(function(resolve) { resolveFn = resolve; });
+	cache[key] = promise;
+	promise.then(function(url) {
+		if(url) {
+			self.setPosterImage(repl,url);
+		}
+	});
+	MinimapWidget._jsonpSeq = (MinimapWidget._jsonpSeq || 0) + 1;
+	var cbName = "_tcMinimapJsonp" + MinimapWidget._jsonpSeq,
+		script = doc.createElement("script"),
+		settled = false,
+		timer;
+	function finish(url) {
+		if(settled) {
+			return;
+		}
+		settled = true;
+		cache[key] = url || "";
+		try {
+			delete win[cbName];
+		} catch(e) {
+			win[cbName] = undefined;
+		}
+		if(timer) {
+			win.clearTimeout(timer);
+		}
+		if(script.parentNode) {
+			script.parentNode.removeChild(script);
+		}
+		resolveFn(url || "");
+	}
+	win[cbName] = function(data) {
+		var url = "";
+		try {
+			url = pick(data) || "";
+		} catch(e) {
+			url = "";
+		}
+		finish(url);
+	};
+	script.onerror = function() {
+		finish("");
+	};
+	// Give up if the callback never fires (e.g. blocked by CSP, or the network hangs).
+	timer = win.setTimeout(function() {
+		finish("");
+	},10000);
+	script.src = endpoint + (endpoint.indexOf("?") === -1 ? "?" : "&") + callbackParam + "=" + cbName;
+	head.appendChild(script);
 };
 
 /*

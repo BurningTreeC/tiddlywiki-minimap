@@ -57,6 +57,10 @@
             "isTiddlerFile": true
         },
         {
+            "file": "config-apple-music.tid",
+            "isTiddlerFile": true
+        },
+        {
             "file": "controlpanel.tid",
             "isTiddlerFile": true
         },

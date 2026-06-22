@@ -30,3 +30,11 @@ Border drawn around each tiddler in the minimap, for visibility:
 !! Tooltips
 
 <$checkbox tiddler="$:/config/BurningTreeC/minimap/tooltips" field="text" checked="yes" unchecked="no" default="no"> ''Show tooltips'' — hovering a tiddler in the minimap shows its title</$checkbox>
+
+!! Embed thumbnails
+
+Embedded videos, tracks and pens (YouTube, Vimeo, Spotify, SoundCloud, Dailymotion, CodePen, CodeSandbox, Internet Archive) show a preview thumbnail in the minimap automatically.
+
+<$checkbox tiddler="$:/config/BurningTreeC/minimap/apple-music" field="text" checked="yes" unchecked="no" default="no"> ''Apple Music thumbnails''</$checkbox>
+
+<div style="opacity:0.7;font-size:0.85em;">Off by default. Apple's artwork lookup has no CORS, so previews can only be fetched via JSONP, which loads a script from `itunes.apple.com`. The request is built entirely by the plugin (fixed host, numeric album id), but enabling it means trusting that endpoint to run script in your wiki. Leave off if your wiki uses a strict Content-Security-Policy.</div>
