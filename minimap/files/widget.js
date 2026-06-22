@@ -122,6 +122,9 @@ MinimapWidget.prototype.render = function(parent,nextSibling) {
 	// The mapped elements currently watched for size changes (kept in sync with
 	// the rendered set so the map updates live as tiddlers grow/shrink).
 	this._observedEls = [];
+	// Cache of resolved video-provider poster URLs (e.g. Vimeo, looked up
+	// asynchronously) keyed by video id, so repeated rebuilds don't refetch.
+	this._posterCache = Object.create(null);
 	// Bind handlers once so we can remove them again
 	this.boundScroll = this.onScroll.bind(this);
 	this.boundResize = this.onResize.bind(this);
@@ -453,20 +456,125 @@ MinimapWidget.prototype.processClone = function(original, clone) {
 			drop[i].parentNode.removeChild(drop[i]);
 		}
 	}
-	// Replace each iframe with a snapshot. The cloned and original trees have the
-	// same structure, so iframes line up by index.
-	if(original.querySelectorAll && clone.querySelectorAll) {
-		var origFrames = original.querySelectorAll("iframe"),
-			cloneFrames = clone.querySelectorAll("iframe");
-		for(var f = 0; f < cloneFrames.length && f < origFrames.length; f++) {
-			this.replaceIframe(origFrames[f],cloneFrames[f]);
-		}
+	// Copy each <canvas>'s pixels across, then replace each <iframe> with a
+	// snapshot. The cloned and original trees have the same structure, so the
+	// elements line up by index. Canvases are done first, while the clone still
+	// mirrors the original 1:1 - replacing iframes can insert extra nodes (a
+	// same-origin iframe's body) that would otherwise throw the index off.
+	var origCanvases = this.matchingElements(original,"canvas"),
+		cloneCanvases = this.matchingElements(clone,"canvas");
+	for(var c = 0; c < cloneCanvases.length && c < origCanvases.length; c++) {
+		this.snapshotCanvas(origCanvases[c],cloneCanvases[c]);
+	}
+	var origVideos = this.matchingElements(original,"video"),
+		cloneVideos = this.matchingElements(clone,"video");
+	for(var v = 0; v < cloneVideos.length && v < origVideos.length; v++) {
+		this.replaceVideo(origVideos[v],cloneVideos[v]);
+	}
+	var origFrames = this.matchingElements(original,"iframe"),
+		cloneFrames = this.matchingElements(clone,"iframe");
+	for(var f = 0; f < cloneFrames.length && f < origFrames.length; f++) {
+		this.replaceIframe(origFrames[f],cloneFrames[f]);
 	}
 	var withId = clone.querySelectorAll ? clone.querySelectorAll("[id]") : [];
 	for(var j = 0; j < withId.length; j++) {
 		withId[j].removeAttribute("id");
 	}
 	return clone;
+};
+
+/*
+All descendants of root matching the tag name, plus root itself when it matches.
+Used so a cloned subtree whose own root is an <iframe>/<canvas> is handled too,
+not only nested ones.
+*/
+MinimapWidget.prototype.matchingElements = function(root,tag) {
+	var list = root.querySelectorAll ? Array.prototype.slice.call(root.querySelectorAll(tag)) : [];
+	if(root.tagName && root.tagName.toLowerCase() === tag) {
+		list.unshift(root);
+	}
+	return list;
+};
+
+/*
+Copy a <canvas>'s drawn pixels onto its clone. cloneNode copies the element and
+its width/height attributes but not the bitmap (the backing store is not part of
+the DOM), so a cloned canvas is blank - draw the original onto it. A canvas
+tainted by cross-origin data throws on read, and a WebGL canvas without
+preserveDrawingBuffer reads blank; in both cases fall back to a neutral block.
+*/
+MinimapWidget.prototype.snapshotCanvas = function(origCanvas,cloneCanvas) {
+	try {
+		var w = origCanvas.width,
+			h = origCanvas.height;
+		if(!w || !h) {
+			return;
+		}
+		cloneCanvas.width = w;
+		cloneCanvas.height = h;
+		var ctx = cloneCanvas.getContext("2d");
+		if(ctx) {
+			ctx.drawImage(origCanvas,0,0);
+		}
+	} catch(e) {
+		if(cloneCanvas.classList) {
+			cloneCanvas.classList.add("tc-minimap-canvas-blank");
+		}
+	}
+};
+
+/*
+Replace a cloned <video> with a static snapshot. cloneNode keeps the poster/src
+but not the decoded frame, and a live <video> clone would needlessly fetch the
+media, so swap it for: the current frame painted onto a canvas (works even for a
+cross-origin video - drawing only taints the canvas, which we never read back),
+or the poster image when no frame is decoded yet, or a neutral placeholder.
+*/
+MinimapWidget.prototype.replaceVideo = function(origVideo,cloneVideo) {
+	var doc = this.document;
+	if(!cloneVideo.parentNode) {
+		return;
+	}
+	var rect = origVideo.getBoundingClientRect(),
+		repl = doc.createElement("div");
+	repl.className = "tc-minimap-video";
+	var cls = cloneVideo.getAttribute("class");
+	if(cls) {
+		repl.className += " " + cls;
+	}
+	repl.setAttribute("style",cloneVideo.getAttribute("style") || "");
+	repl.style.width = rect.width + "px";
+	repl.style.height = rect.height + "px";
+	repl.style.overflow = "hidden";
+	repl.style.boxSizing = "border-box";
+	var done = false;
+	try {
+		var vw = origVideo.videoWidth,
+			vh = origVideo.videoHeight;
+		if(vw && vh) {
+			var canvas = doc.createElement("canvas");
+			canvas.width = vw;
+			canvas.height = vh;
+			canvas.className = "tc-minimap-video-frame";
+			var ctx = canvas.getContext("2d");
+			if(ctx) {
+				ctx.drawImage(origVideo,0,0,vw,vh);
+				repl.appendChild(canvas);
+				done = true;
+			}
+		}
+	} catch(e) {
+		// Fall back to the poster image / placeholder below
+	}
+	if(!done) {
+		var poster = origVideo.getAttribute("poster");
+		if(poster) {
+			this.setPosterImage(repl,poster);
+		} else {
+			repl.className += " tc-minimap-iframe-blank";
+		}
+	}
+	cloneVideo.parentNode.replaceChild(repl,cloneVideo);
 };
 
 /*
@@ -495,6 +603,7 @@ MinimapWidget.prototype.replaceIframe = function(origIframe,cloneIframe) {
 	repl.style.height = rect.height + "px";
 	repl.style.overflow = "hidden";
 	repl.style.boxSizing = "border-box";
+	var handled = false;
 	try {
 		var idoc = origIframe.contentDocument;
 		if(idoc && idoc.body) {
@@ -510,14 +619,170 @@ MinimapWidget.prototype.replaceIframe = function(origIframe,cloneIframe) {
 			// default value, not text typed since load, so copy it across.
 			this.syncFieldValues(idoc.body,bodyClone);
 			repl.appendChild(bodyClone);
-		} else {
-			repl.className += " tc-minimap-iframe-blank";
+			handled = true;
 		}
 	} catch(e) {
-		// Cross-origin: keep the sized placeholder
+		// Cross-origin: the document can't be read - fall through to a poster image
+		// (derived from the embed URL) or a neutral placeholder.
+	}
+	// For an iframe we couldn't read (cross-origin, e.g. a YouTube/Vimeo embed),
+	// try to show the provider's poster thumbnail - that's just loading a public
+	// image from the src URL, which is allowed, unlike reading the frame itself.
+	if(!handled && !this.addProviderPoster(origIframe,repl)) {
+		// Unknown cross-origin embed: keep the sized neutral placeholder
 		repl.className += " tc-minimap-iframe-blank";
 	}
 	cloneIframe.parentNode.replaceChild(repl,cloneIframe);
+};
+
+/*
+Given a (cross-origin) iframe, try to render a known video provider's poster
+thumbnail into the replacement node. Returns true when a provider was recognised
+(YouTube synchronously, Vimeo via an async lookup that fills the image in later),
+false for an unrecognised embed so the caller can use a neutral placeholder.
+*/
+MinimapWidget.prototype.addProviderPoster = function(origIframe,repl) {
+	var raw = origIframe.getAttribute("src") || origIframe.src || "";
+	if(!raw) {
+		return false;
+	}
+	// An embed may be proxied (e.g. TiddlyDesktop reroutes YouTube/Vimeo through a
+	// local server so they load offline-of-CDN), so test the proxy URL and any real
+	// URL unwrapped from it.
+	var candidates = this.embedUrlCandidates(raw);
+	for(var i = 0; i < candidates.length; i++) {
+		var src = candidates[i];
+		// YouTube: .../embed/<id>, .../v/<id>, or youtu.be/<id> (also -nocookie).
+		// Ids are 11 chars; the public poster image needs no API call.
+		var yt = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed|v)\/|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+		if(yt) {
+			this.setPosterImage(repl,"https://img.youtube.com/vi/" + yt[1] + "/hqdefault.jpg");
+			return true;
+		}
+		// Vimeo: player.vimeo.com/video/<id> or vimeo.com/<id>. The poster URL is not
+		// derivable from the id, so look it up via the (CORS-enabled) oEmbed endpoint.
+		var vimeo = src.match(/(?:player\.)?vimeo\.com\/(?:video\/)?(\d+)/);
+		if(vimeo) {
+			// Neutral placeholder until (and if) the async lookup resolves.
+			repl.className += " tc-minimap-iframe-blank";
+			this.fetchVimeoPoster(vimeo[1],repl);
+			return true;
+		}
+	}
+	return false;
+};
+
+/*
+Expand an iframe src into the list of URLs worth testing for a provider. Besides
+the src itself this covers proxied embeds - e.g. TiddlyDesktop reroutes YouTube
+embeds through a local server and carries the real URL in a `src=`/`url=` query
+parameter (percent-encoded) - so provider detection still sees the real
+youtube.com / vimeo.com address. A wholesale percent-decode is added as a final
+fallback for other proxy shapes.
+*/
+MinimapWidget.prototype.embedUrlCandidates = function(src) {
+	var list = [src],
+		win = this.getWindow(),
+		URLctor = win.URL || (typeof URL !== "undefined" ? URL : null);
+	if(URLctor) {
+		try {
+			var url = new URLctor(src,this.document.baseURI),
+				inner = url.searchParams.get("src") || url.searchParams.get("url");
+			if(inner) {
+				list.push(inner);
+			}
+		} catch(e) {
+			// Not a parseable URL - the plain decode below may still help
+		}
+	}
+	try {
+		var decoded = decodeURIComponent(src);
+		if(decoded !== src) {
+			list.push(decoded);
+		}
+	} catch(e) {
+		// Malformed escape sequence - ignore
+	}
+	return list;
+};
+
+/*
+Insert a poster <img> into a replacement node, covering it. If the image fails to
+load, fall back to the neutral placeholder look.
+*/
+MinimapWidget.prototype.setPosterImage = function(repl,url) {
+	var doc = this.document,
+		img = doc.createElement("img");
+	img.className = "tc-minimap-iframe-poster-img";
+	img.setAttribute("alt","");
+	img.style.width = "100%";
+	img.style.height = "100%";
+	img.style.objectFit = "cover";
+	img.style.display = "block";
+	img.onerror = function() {
+		if(img.parentNode) {
+			img.parentNode.removeChild(img);
+		}
+		if(repl.classList) {
+			repl.classList.add("tc-minimap-iframe-blank");
+		}
+	};
+	if(repl.classList) {
+		repl.classList.remove("tc-minimap-iframe-blank");
+		repl.classList.add("tc-minimap-iframe-poster");
+	}
+	img.setAttribute("src",url);
+	repl.appendChild(img);
+};
+
+/*
+Look up a Vimeo video's poster via the oEmbed endpoint and, when it resolves, set
+it as the replacement node's image. Results (including failures) are cached by id
+on the widget so repeated rebuilds don't refetch; concurrent rebuilds chain onto
+the in-flight request.
+*/
+MinimapWidget.prototype.fetchVimeoPoster = function(id,repl) {
+	var self = this,
+		win = this.getWindow(),
+		cache = this._posterCache,
+		cached = cache[id];
+	if(cached !== undefined) {
+		if(typeof cached === "string") {
+			if(cached) {
+				this.setPosterImage(repl,cached);
+			}
+		} else if(cached && cached.then) {
+			cached.then(function(url) {
+				if(url) {
+					self.setPosterImage(repl,url);
+				}
+			});
+		}
+		return;
+	}
+	if(!win.fetch) {
+		cache[id] = "";
+		return;
+	}
+	var p = win.fetch("https://vimeo.com/api/oembed.json?url=https%3A%2F%2Fvimeo.com%2F" + encodeURIComponent(id))
+		.then(function(response) {
+			return response.json();
+		})
+		.then(function(data) {
+			var url = (data && data.thumbnail_url) || "";
+			cache[id] = url;
+			return url;
+		})
+		.catch(function() {
+			cache[id] = "";
+			return "";
+		});
+	cache[id] = p;
+	p.then(function(url) {
+		if(url) {
+			self.setPosterImage(repl,url);
+		}
+	});
 };
 
 /*

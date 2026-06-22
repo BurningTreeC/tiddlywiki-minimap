@@ -128,6 +128,41 @@ html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
 	opacity: 0.2;
 }
 
+/* Provider poster thumbnail (e.g. YouTube/Vimeo) standing in for a cross-origin
+   video iframe we can't read */
+.tc-minimap-iframe-poster {
+	overflow: hidden;
+}
+
+.tc-minimap-iframe-poster-img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+/* A <canvas> whose pixels couldn't be read (tainted by cross-origin data, or a
+   WebGL canvas without preserveDrawingBuffer): a neutral placeholder */
+.tc-minimap-canvas-blank {
+	background: <<colour muted-foreground>>;
+	opacity: 0.2;
+}
+
+/* Static snapshot standing in for a <video> (current frame on a canvas, or its
+   poster image) */
+.tc-minimap-video {
+	display: block;
+	overflow: hidden;
+	background: #000;
+}
+
+.tc-minimap-video-frame {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
 .tc-minimap-overlay-container {
 	position: absolute;
 	top: 0;
