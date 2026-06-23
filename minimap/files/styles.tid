@@ -177,7 +177,10 @@ html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
 	top: 0;
 	left: 0;
 	width: 100%;
-	background: rgb(121, 121, 121);
+	/* The overlay is a translucent block; pick a colour that contrasts with the
+	   minimap content. Dark palettes (colorscheme: dark) need a light overlay,
+	   light palettes a dark one. */
+	background: {{{ [{$:/palette}get[colorscheme]match[dark]then[#dcdcdc]else[#797979]] }}};
 	opacity: 0.2;
 	pointer-events: auto;
 	cursor: grab;
