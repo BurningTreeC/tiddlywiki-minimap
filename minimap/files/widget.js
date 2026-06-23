@@ -131,6 +131,8 @@ MinimapWidget.prototype.render = function(parent,nextSibling) {
 	this.boundPointerDown = this.onPointerDown.bind(this);
 	this.boundPointerMove = this.onPointerMove.bind(this);
 	this.boundPointerUp = this.onPointerUp.bind(this);
+	// Fired when an embedded resource inside the mapped content finishes loading.
+	this.boundContentLoad = this.scheduleRebuild.bind(this);
 	// Resolve the container/scroller and wire everything up
 	this.setup();
 };
@@ -372,6 +374,16 @@ MinimapWidget.prototype.attachListeners = function() {
 		this.mutationObserver = new win.MutationObserver(this.scheduleRebuild.bind(this));
 		this.mutationObserver.observe(this.container,{childList: true, subtree: true});
 	}
+	// Embedded resources (iframes such as SoundCloud/YouTube, videos, images) often
+	// finish loading *after* the first build - at wiki startup the iframe isn't laid
+	// out and a cross-origin embed's poster/oEmbed lookup hasn't resolved, so the
+	// initial clone captures an empty, zero-sized placeholder. Their `load` events
+	// neither bubble nor mutate/resize the host DOM, so the Mutation/ResizeObservers
+	// never see them. Listen in the capture phase on the mapped container (capture
+	// reaches non-bubbling load events) and rebuild once the content has actually
+	// loaded. Videos signal readiness with `loadeddata` rather than `load`.
+	this.container.addEventListener("load",this.boundContentLoad,true);
+	this.container.addEventListener("loadeddata",this.boundContentLoad,true);
 };
 
 /*
@@ -1628,6 +1640,10 @@ MinimapWidget.prototype.detachListeners = function() {
 	if(this.mutationObserver) {
 		this.mutationObserver.disconnect();
 		this.mutationObserver = null;
+	}
+	if(this.container) {
+		this.container.removeEventListener("load",this.boundContentLoad,true);
+		this.container.removeEventListener("loadeddata",this.boundContentLoad,true);
 	}
 };
 
