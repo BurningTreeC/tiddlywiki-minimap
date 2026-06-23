@@ -1456,6 +1456,8 @@ MinimapWidget.prototype.onPointerDown = function(event) {
 		this.dragStartY = event.clientY;
 		this.dragStartTop = this._overlayTop || 0;
 		this.panel.classList.add("tc-minimap-active");
+		// Scroll instantly for the whole drag so the page tracks the pointer
+		this.beginInstantScroll();
 		if(this.panel.setPointerCapture) {
 			try {
 				this.panel.setPointerCapture(event.pointerId);
@@ -1475,7 +1477,16 @@ MinimapWidget.prototype.onPointerDown = function(event) {
 		clientH = this.scroller.clientHeight,
 		topOffset = this._topOffset || 0,
 		target = contentY - (clientH + topOffset) / 2;
+	// Jump instantly to the clicked position. Only manage the override if a drag
+	// isn't already doing so (e.g. a second touch), so we never end it early.
+	var manageInstant = !this._instantScrollActive;
+	if(manageInstant) {
+		this.beginInstantScroll();
+	}
 	this.scrollTo(target);
+	if(manageInstant) {
+		this.endInstantScroll();
+	}
 };
 
 MinimapWidget.prototype.onPointerMove = function(event) {
@@ -1506,6 +1517,8 @@ MinimapWidget.prototype.onPointerUp = function(event) {
 		return;
 	}
 	this.isDragging = false;
+	// Restore the scroller's previous scroll-behavior now the drag is over
+	this.endInstantScroll();
 	if(this.panel.releasePointerCapture && this.dragPointerId !== null) {
 		try {
 			this.panel.releasePointerCapture(this.dragPointerId);
@@ -1515,6 +1528,37 @@ MinimapWidget.prototype.onPointerUp = function(event) {
 	}
 	this.dragPointerId = null;
 	this.panel.classList.remove("tc-minimap-active");
+};
+
+/*
+While the minimap is driving the scroll position (dragging the overlay, or a
+click on the map body), the page must scroll instantly so it tracks the pointer
+exactly. A theme may set `scroll-behavior: smooth` on the scroller, which would
+otherwise turn every scrollTop write into an animated scroll - the page lags
+behind the pointer and overshoots, and dragging feels imprecise. We force
+instant scrolling for the duration of the gesture by overriding the property
+inline on the scroller itself. `scroll-behavior` is not inherited, so the
+scrolling box is the only element that matters; we save and restore whatever was
+set inline before so we never clobber another value.
+*/
+MinimapWidget.prototype.beginInstantScroll = function() {
+	if(this._instantScrollActive || !this.scroller || !this.scroller.style) {
+		return;
+	}
+	this._instantScrollActive = true;
+	this._prevScrollBehavior = this.scroller.style.scrollBehavior;
+	this.scroller.style.scrollBehavior = "auto";
+};
+
+MinimapWidget.prototype.endInstantScroll = function() {
+	if(!this._instantScrollActive) {
+		return;
+	}
+	this._instantScrollActive = false;
+	if(this.scroller && this.scroller.style) {
+		this.scroller.style.scrollBehavior = this._prevScrollBehavior || "";
+	}
+	this._prevScrollBehavior = undefined;
 };
 
 MinimapWidget.prototype.scrollTo = function(top) {
@@ -1552,6 +1596,8 @@ change) would leak the previous listeners and observers.
 */
 MinimapWidget.prototype.detachListeners = function() {
 	var win = this.getWindow();
+	// Make sure a drag interrupted by teardown doesn't leave the override behind
+	this.endInstantScroll();
 	if(this.resolveRaf) {
 		win.cancelAnimationFrame(this.resolveRaf);
 		this.resolveRaf = null;
