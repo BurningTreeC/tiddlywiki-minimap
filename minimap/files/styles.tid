@@ -181,7 +181,7 @@ html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
 	   minimap content. Dark palettes (colorscheme: dark) need a light overlay,
 	   light palettes a dark one. */
 	background: {{{ [{$:/palette}get[colorscheme]match[dark]then[#ffffff]else[#797979]] }}};
-	opacity: 0.2;
+	opacity: {{{ [{$:/palette}get[colorscheme]match[dark]then[0.3]else[0.2]] }}};
 	pointer-events: auto;
 	cursor: grab;
 	/* Don't let touch dragging the overlay pan/scroll the page or fire gestures */
@@ -191,7 +191,7 @@ html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
 }
 
 .tc-minimap-overlay:hover {
-	opacity: 0.3;
+	opacity: {{{ [{$:/palette}get[colorscheme]match[dark]then[0.45]else[0.3]] }}};
 }
 
 .tc-minimap-active,
@@ -200,7 +200,7 @@ html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
 }
 
 .tc-minimap-active .tc-minimap-overlay {
-	opacity: 0.4;
+	opacity: {{{ [{$:/palette}get[colorscheme]match[dark]then[0.6]else[0.4]] }}};
 }
 
 /* Hide the minimap and its grip on narrow screens (below the sidebar breakpoint).
