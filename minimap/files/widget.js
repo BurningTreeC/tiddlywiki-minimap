@@ -159,7 +159,13 @@ MinimapWidget.prototype.execute = function() {
 	var width = parseInt(this.getAttribute("width",""),10);
 	this.minimapWidth = (width && width > 0) ? width : DEFAULT_WIDTH;
 	// CSS custom property names to publish on the document root (configurable).
-	this.widthVariable = this.normaliseCssVar(this.getAttribute("widthVariable","--tv-minimap-width"));
+	// The width variable is opt-in: only published when a widthVariable attribute is
+	// given. The bundled plugin's styles.tid already maintains --tv-minimap-width as
+	// the single source of truth (from the width config), so a standalone <$minimap>
+	// doesn't pollute that global unless it explicitly asks for it. The scrollbar
+	// variable keeps its default - it is the always-present grip offset, measured
+	// widget-independently by the page-scrollbar startup module too.
+	this.widthVariable = this.normaliseCssVar(this.getAttribute("widthVariable",""));
 	this.scrollbarVariable = this.normaliseCssVar(this.getAttribute("scrollbarVariable","--tv-minimap-scrollbar-width"));
 };
 
@@ -269,7 +275,8 @@ MinimapWidget.prototype.getWindow = function() {
 /*
 Publish (or clear) the minimap width as a CSS custom property (named by the
 widthVariable attribute) on the document's root element, so stylesheets can size
-around it.
+around it. No-op unless a widthVariable attribute was given - the variable is
+opt-in (see execute()).
 */
 MinimapWidget.prototype.publishWidth = function(clear) {
 	var doc = this.document,

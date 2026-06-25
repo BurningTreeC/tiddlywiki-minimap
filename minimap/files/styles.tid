@@ -4,10 +4,11 @@ tags: $:/tags/Stylesheet
 \rules only filteredtranscludeinline transcludeinline macrodef macrocallinline
 
 /* Baseline minimap width on the document root, always present (independent of
-   whether the widget is mounted, and of which placement is active). The widget
-   overrides this inline with its live value while mounted; when it unmounts this
-   baseline remains, so stylesheets that read var(--tv-minimap-width) always have
-   a value. Kept in sync with the widget via the shared width config tiddler. */
+   whether the widget is mounted, and of which placement is active). This is the
+   single source of truth for --tv-minimap-width, driven by the shared width config
+   tiddler, so stylesheets that read var(--tv-minimap-width) always have a value.
+   The widget does not publish this variable unless given an explicit widthVariable
+   attribute; a widget configured to publish it overrides this baseline while mounted. */
 html {
 	--tv-minimap-width: {{$:/config/BurningTreeC/minimap/width}}px;
 }
