@@ -70,6 +70,13 @@ MinimapWidget.prototype.render = function(parent,nextSibling) {
 	panel.className = "tc-minimap" + (this.minimapClass ? " " + this.minimapClass : "");
 	panel.setAttribute("aria-hidden","true");
 	panel.style.width = this.minimapWidth + "px";
+	// Applied inline (not only via the bundled stylesheet) so every <$minimap>
+	// behaves correctly even when used standalone without the plugin's styles:
+	// dragging/tapping the map drives navigation through pointer events, so text
+	// must never be selected and touch must never pan/scroll the page.
+	panel.style.userSelect = "none";
+	panel.style.webkitUserSelect = "none";
+	panel.style.touchAction = "none";
 	// Publish the width as a CSS custom property on the document root so
 	// stylesheets (e.g. the story-river spacing) can reserve room for the minimap
 	// without hardcoding a value: width: calc(... - var(--tv-minimap-width)).
@@ -89,6 +96,9 @@ MinimapWidget.prototype.render = function(parent,nextSibling) {
 	overlayContainer.className = "tc-minimap-overlay-container";
 	var overlay = doc.createElement("div");
 	overlay.className = "tc-minimap-overlay";
+	// Same rationale as the panel: dragging the viewport overlay must not pan or
+	// scroll the page behind it (applied inline so it holds without the stylesheet).
+	overlay.style.touchAction = "none";
 	overlayContainer.appendChild(overlay);
 	panel.appendChild(inner);
 	panel.appendChild(overlayContainer);

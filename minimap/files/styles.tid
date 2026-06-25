@@ -41,6 +41,11 @@ html {
 	cursor: pointer;
 	box-shadow: -1px 0 4px rgba(0, 0, 0, 0.1);
 	transition: right 200ms ease, background-color 150ms, color 150ms;
+	user-select: none;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	/* A tap-toggle button: skip the double-tap zoom delay, no panning */
+	touch-action: manipulation;
 }
 
 /* When an overlay scrollbar is actually present (the page overflows and no
@@ -72,6 +77,9 @@ html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
 	user-select: none;
 	-webkit-user-select: none;
 	-moz-user-select: none;
+	/* Dragging/tapping the map drives navigation via pointer events; never let
+	   touch on it pan or scroll the page or fire browser gestures */
+	touch-action: none;
 	cursor: pointer;
 }
 
