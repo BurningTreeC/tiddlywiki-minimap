@@ -99,7 +99,13 @@ html.tc-minimap-overlay-scrollbar .tc-minimap-grip-edge {
 }
 
 .tc-minimap-block {
-	overflow: hidden;
+	/* Visible (not hidden) so popups that a cloned tiddler renders outside its own
+	   border-box - dropdowns, the tiddler "more" menu, etc. - aren't clipped at the
+	   block edge. The block is sized to the element's measured box, which already
+	   excludes such absolutely-positioned popups, so normal in-flow content still
+	   fits exactly; only the popups now spill, and the panel (overflow: hidden)
+	   still clips the map as a whole. */
+	overflow: visible;
 	/* Border width is set inline by the widget (scale-compensated); colour here.
 	   Override the colour with the --tv-minimap-block-border-color property. */
 	border-color: var(--tv-minimap-block-border-color, <<colour muted-foreground>>);
