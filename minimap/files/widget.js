@@ -120,6 +120,11 @@ MinimapWidget.prototype.render = function(parent,nextSibling) {
 	this.resolveAttempts = 0;
 	// The id of the pointer currently dragging the overlay (null when not dragging).
 	this.dragPointerId = null;
+	// Minimap gestures should not count as document clicks: TiddlyWiki dismisses
+	// popups from a capture-phase click listener on <html>, so we arm a one-shot
+	// suppression for the click that follows a minimap pointer interaction.
+	this.suppressNextClick = false;
+	this.suppressNextClickTimer = null;
 	// Whether this widget owns (publishes) the scrollbar-width variable. Decided in
 	// attachListeners once the root is known; false until then so no stray writes.
 	this.ownsScrollbarVar = false;
@@ -141,6 +146,7 @@ MinimapWidget.prototype.render = function(parent,nextSibling) {
 	this.boundPointerDown = this.onPointerDown.bind(this);
 	this.boundPointerMove = this.onPointerMove.bind(this);
 	this.boundPointerUp = this.onPointerUp.bind(this);
+	this.boundDocumentClickCapture = this.onDocumentClickCapture.bind(this);
 	// Fired when an embedded resource inside the mapped content finishes loading.
 	this.boundContentLoad = this.scheduleRebuild.bind(this);
 	// Resolve the container/scroller and wire everything up
@@ -347,6 +353,10 @@ MinimapWidget.prototype.attachListeners = function() {
 	// move/up events to the panel even when the pointer leaves it, so no
 	// window-level listeners are needed.
 	this.panel.addEventListener("pointerdown",this.boundPointerDown);
+	// TiddlyWiki dismisses popups from a capture-phase click listener on <html>.
+	// Intercept minimap-originated clicks one step earlier, on the document, so
+	// using the minimap doesn't count as an outside click on story-river popups.
+	this.document.addEventListener("click",this.boundDocumentClickCapture,true);
 	this.panel.addEventListener("pointermove",this.boundPointerMove);
 	this.panel.addEventListener("pointerup",this.boundPointerUp);
 	this.panel.addEventListener("pointercancel",this.boundPointerUp);
@@ -1472,11 +1482,46 @@ MinimapWidget.prototype.scheduleRebuild = function() {
 	},100);
 };
 
+MinimapWidget.prototype.clearNextClickSuppression = function() {
+	var win = this.getWindow();
+	this.suppressNextClick = false;
+	if(this.suppressNextClickTimer) {
+		win.clearTimeout(this.suppressNextClickTimer);
+		this.suppressNextClickTimer = null;
+	}
+};
+
+MinimapWidget.prototype.scheduleNextClickSuppressionClear = function() {
+	var self = this,
+		win = this.getWindow();
+	if(this.suppressNextClickTimer) {
+		win.clearTimeout(this.suppressNextClickTimer);
+	}
+	this.suppressNextClickTimer = win.setTimeout(function() {
+		self.clearNextClickSuppression();
+	},0);
+};
+
+MinimapWidget.prototype.onDocumentClickCapture = function(event) {
+	if(!this.panel || !event.target || (!this.suppressNextClick && !this.panel.contains(event.target))) {
+		return;
+	}
+	this.clearNextClickSuppression();
+	event.preventDefault();
+	event.stopPropagation();
+	if(event.stopImmediatePropagation) {
+		event.stopImmediatePropagation();
+	}
+};
+
 MinimapWidget.prototype.onPointerDown = function(event) {
 	// Primary button/contact only (ignore right/middle click and secondary touches).
 	if(event.button > 0) {
 		return;
 	}
+	this.clearNextClickSuppression();
+	this.suppressNextClick = true;
+	event.preventDefault();
 	if(event.target === this.overlay) {
 		// Begin dragging the overlay. Capture the pointer so move/up keep arriving
 		// at the panel even if the pointer strays outside it during the drag.
@@ -1540,11 +1585,18 @@ MinimapWidget.prototype.onPointerMove = function(event) {
 
 MinimapWidget.prototype.onPointerUp = function(event) {
 	if(!this.isDragging) {
+		if(this.suppressNextClick) {
+			this.scheduleNextClickSuppressionClear();
+		}
 		return;
 	}
 	if(event && this.dragPointerId !== null && event.pointerId !== this.dragPointerId) {
 		return;
 	}
+	if(this.suppressNextClick) {
+		this.scheduleNextClickSuppressionClear();
+	}
+	event.preventDefault();
 	this.isDragging = false;
 	// Restore the scroller's previous scroll-behavior now the drag is over
 	this.endInstantScroll();
@@ -1634,6 +1686,10 @@ MinimapWidget.prototype.detachListeners = function() {
 	if(this.rebuildTimer) {
 		win.clearTimeout(this.rebuildTimer);
 		this.rebuildTimer = null;
+	}
+	this.clearNextClickSuppression();
+	if(this.document) {
+		this.document.removeEventListener("click",this.boundDocumentClickCapture,true);
 	}
 	if(this.scrollEventTarget) {
 		this.scrollEventTarget.removeEventListener("scroll",this.boundScroll);
