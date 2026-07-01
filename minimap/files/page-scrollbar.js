@@ -38,6 +38,13 @@ exports.startup = function() {
 		return;
 	}
 
+	// Last published values, so we only write to the DOM when something actually
+	// changed. Writing the CSS variable / toggling the class invalidates layout,
+	// which the ResizeObserver below would see as another resize - guarding against
+	// no-op writes keeps that from feeding back into a loop.
+	var lastOverlay = null,
+		lastScrollbarWidth = null;
+
 	function update() {
 		var win = document.defaultView || window,
 			// innerWidth includes the scrollbar; documentElement.clientWidth excludes
@@ -49,23 +56,48 @@ exports.startup = function() {
 			// non-overflowing page must NOT count - otherwise the grip would widen
 			// when there's no scrollbar painting over it at all.
 			hasOverlay = gutter === 0 && root.scrollHeight > root.clientHeight;
-		root.classList.toggle("tc-minimap-overlay-scrollbar",hasOverlay);
+		if(hasOverlay !== lastOverlay) {
+			lastOverlay = hasOverlay;
+			root.classList.toggle("tc-minimap-overlay-scrollbar",hasOverlay);
+		}
 		// Publish the host container's scrollbar width. offsetWidth - clientWidth is
 		// the vertical scrollbar's footprint (0 with no/overlay scrollbar, or when
 		// the host is absent/hidden). Always set it so the variable is never missing.
 		var host = document.querySelector(HOST_SELECTOR),
 			scrollbarWidth = host ? Math.max(0, host.offsetWidth - host.clientWidth) : 0;
-		root.style.setProperty(SCROLLBAR_VAR,scrollbarWidth + "px");
+		if(scrollbarWidth !== lastScrollbarWidth) {
+			lastScrollbarWidth = scrollbarWidth;
+			root.style.setProperty(SCROLLBAR_VAR,scrollbarWidth + "px");
+		}
+	}
+
+	// Batch the measure-and-write into a single animation frame and coalesce bursts.
+	// Doing the DOM writes outside the ResizeObserver's synchronous delivery cycle
+	// is what prevents the "ResizeObserver loop completed with undelivered
+	// notifications" warning when the story-river / sidebar is resized rapidly.
+	var rafPending = false,
+		raf = window.requestAnimationFrame ?
+			window.requestAnimationFrame.bind(window) :
+			function(cb) { return setTimeout(cb,16); };
+	function scheduleUpdate() {
+		if(rafPending) {
+			return;
+		}
+		rafPending = true;
+		raf(function() {
+			rafPending = false;
+			update();
+		});
 	}
 
 	update();
 
-	window.addEventListener("resize", update);
+	window.addEventListener("resize", scheduleUpdate);
 
 	// The scrollbar appears/disappears as page/sidebar content grows/shrinks, which
 	// changes client width without a window resize.
 	if(typeof ResizeObserver !== "undefined") {
-		var ro = new ResizeObserver(update);
+		var ro = new ResizeObserver(scheduleUpdate);
 		ro.observe(root);
 		if(document.body) {
 			ro.observe(document.body);
@@ -78,6 +110,6 @@ exports.startup = function() {
 
 	// Re-check after wiki changes (DOM updates land after the refresh cycle).
 	$tw.wiki.addEventListener("change", function() {
-		$tw.utils.nextTick(update);
+		$tw.utils.nextTick(scheduleUpdate);
 	});
 };

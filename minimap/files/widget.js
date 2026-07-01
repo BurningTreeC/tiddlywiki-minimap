@@ -378,7 +378,7 @@ MinimapWidget.prototype.attachListeners = function() {
 		// not a full re-clone of the mapped content.
 		if(this.hostScroller) {
 			this.scrollbarObserver = new win.ResizeObserver(function() {
-				self.publishScrollbarWidth();
+				self.scheduleScrollbarWidth();
 			});
 			this.scrollbarObserver.observe(this.hostScroller);
 		}
@@ -1441,11 +1441,36 @@ MinimapWidget.prototype.publishScrollbarWidth = function(clear) {
 	}
 	if(clear) {
 		root.style.removeProperty(this.scrollbarVariable);
+		this.lastScrollbarWidth = null;
 		return;
 	}
 	var host = this.hostScroller,
 		width = host ? Math.max(0, host.offsetWidth - host.clientWidth) : 0;
+	// Skip no-op writes: setting the variable invalidates layout, which the
+	// scrollbarObserver would see as another resize and feed back into a loop.
+	if(width === this.lastScrollbarWidth) {
+		return;
+	}
+	this.lastScrollbarWidth = width;
 	root.style.setProperty(this.scrollbarVariable,width + "px");
+};
+
+/*
+Batched, coalesced republish of the scrollbar-width variable used by the
+scrollbarObserver. Deferring the write to an animation frame moves it out of the
+ResizeObserver's synchronous delivery cycle, avoiding the "ResizeObserver loop
+completed with undelivered notifications" warning during rapid sidebar resizes.
+*/
+MinimapWidget.prototype.scheduleScrollbarWidth = function() {
+	var self = this,
+		win = this.getWindow();
+	if(this.scrollbarRaf) {
+		return;
+	}
+	this.scrollbarRaf = win.requestAnimationFrame(function() {
+		self.scrollbarRaf = null;
+		self.publishScrollbarWidth();
+	});
 };
 
 MinimapWidget.prototype.onScroll = function() {
@@ -1682,6 +1707,10 @@ MinimapWidget.prototype.detachListeners = function() {
 	if(this.resolveRaf) {
 		win.cancelAnimationFrame(this.resolveRaf);
 		this.resolveRaf = null;
+	}
+	if(this.scrollbarRaf) {
+		win.cancelAnimationFrame(this.scrollbarRaf);
+		this.scrollbarRaf = null;
 	}
 	if(this.rebuildTimer) {
 		win.clearTimeout(this.rebuildTimer);

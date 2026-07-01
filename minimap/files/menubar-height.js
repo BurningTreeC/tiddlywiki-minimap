@@ -25,17 +25,38 @@ exports.startup = function() {
 
 	var menubarObserver = null;
 	var isTracking = false;
+	// Last published value, so we skip no-op writes that would needlessly invalidate
+	// layout and feed the ResizeObserver another notification.
+	var lastMenubarHeight = null;
 
 	function updateMenubarHeight(menubar) {
 		var computedStyle = window.getComputedStyle(menubar);
 		var position = computedStyle.position;
 		var isOverlapping = position === "fixed" || position === "sticky" || position === "absolute";
-		if(isOverlapping) {
-			var height = menubar.getBoundingClientRect().height;
-			document.documentElement.style.setProperty("--tv-menubar-height", height + "px");
-		} else {
-			document.documentElement.style.setProperty("--tv-menubar-height", "0px");
+		var value = isOverlapping ? (menubar.getBoundingClientRect().height + "px") : "0px";
+		if(value !== lastMenubarHeight) {
+			lastMenubarHeight = value;
+			document.documentElement.style.setProperty("--tv-menubar-height", value);
 		}
+	}
+
+	// Batch the measure-and-write into an animation frame and coalesce bursts, so the
+	// DOM write happens outside the ResizeObserver's synchronous delivery cycle. This
+	// avoids the "ResizeObserver loop completed with undelivered notifications"
+	// warning when the menubar is resized rapidly.
+	var rafPending = false,
+		raf = window.requestAnimationFrame ?
+			window.requestAnimationFrame.bind(window) :
+			function(cb) { return setTimeout(cb,16); };
+	function scheduleUpdate(menubar) {
+		if(rafPending) {
+			return;
+		}
+		rafPending = true;
+		raf(function() {
+			rafPending = false;
+			updateMenubarHeight(menubar);
+		});
 	}
 
 	function setupMenubarTracking(menubar) {
@@ -46,13 +67,13 @@ exports.startup = function() {
 
 		if(typeof ResizeObserver !== "undefined") {
 			menubarObserver = new ResizeObserver(function() {
-				updateMenubarHeight(menubar);
+				scheduleUpdate(menubar);
 			});
 			menubarObserver.observe(menubar);
 		}
 
 		window.addEventListener("resize", function() {
-			updateMenubarHeight(menubar);
+			scheduleUpdate(menubar);
 		});
 	}
 
